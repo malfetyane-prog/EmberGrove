@@ -4,6 +4,17 @@ A cozy focus game for iPhone. Every minute you focus in the real world keeps a s
 
 **Core loop:** start focusing → do real work → collect Glow, Seeds, visits from friends and discoveries → watch Ember and the grove change → choose what grows next → focus again.
 
+## Web version (play on iPhone today, free)
+
+`web/` is a complete version of the game that runs in Safari. It has the same character, world, timer, rewards and progression. It's plain HTML, CSS and JavaScript with no build step, and everything is drawn in code.
+
+- **Play:** open the GitHub Pages link in Safari, tap **Share → Add to Home Screen**, then launch it from the Home Screen icon.
+- **Publishing:** the `Publish web app` workflow deploys `web/` to GitHub Pages on every push to `main`.
+- **Run locally:** `cd web && python3 -m http.server`, then open http://localhost:8000.
+- **Missing from the web version** (iOS doesn't allow these for web apps): Live Activity, Dynamic Island, widgets, haptics, and a notification when a timer ends while the app is closed. The timer still finishes correctly; the rewards are waiting when you come back.
+
+## Native iOS app
+
 ## Building
 
 **No Mac?** [TESTFLIGHT.md](TESTFLIGHT.md) explains how GitHub builds the app and sends it to TestFlight, all from your iPhone.

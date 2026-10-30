@@ -1,0 +1,16 @@
+{
+  "name": "Ember Grove",
+  "short_name": "Ember Grove",
+  "description": "A cozy focus game: every focused minute keeps Ember's fire alive and brings the grove back to life.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1E1630",
+  "theme_color": "#1E1630",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
