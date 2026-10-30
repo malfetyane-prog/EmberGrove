@@ -15,7 +15,7 @@ export function defaultSettings() {
     ambient: 'campfire', ambientVolume: 0.6, soundEffects: true, keepScreenAwake: true,
     reduceMotion: false, appearance: 'system', hasOnboarded: false,
     pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoEvery: 4, pomoAuto: false,
-    deepFocus: false,
+    deepFocus: true,
   };
 }
 

@@ -11,6 +11,7 @@ import * as LB from './leaderboard.js';
 
 // ---------------------------------------------------------------- state
 let S = G.load();
+if (!S.settings.deepDefaultV2) { S.settings.deepFocus = true; S.settings.deepDefaultV2 = true; }
 G.refreshMilestones(S);
 G.save(S);
 
@@ -532,7 +533,7 @@ function sheetSetup() {
       : '<p class="small soft">The stopwatch counts up until you finish. Every minute counts.</p>'}
     <div class="stack" style="gap:10px"><div class="caps">Category</div><div class="chips">${Object.entries(CATEGORIES).map(([k, c]) => `<button class="chip ${u.category === k ? 'on' : ''}" style="--chip:${c.color}" data-act="setup" data-arg="cat:${k}">${icon(c.icon, 16)}${c.title}</button>`).join('')}</div></div>
     <div class="card stack" style="gap:8px">
-      <div class="row"><span style="color:var(--amber)">${icon('moon', 20)}</span><span class="spacer label">Deep Focus</span>
+      <div class="row"><span style="color:var(--amber)">${icon('moon', 20)}</span><span class="spacer label">Deep Focus<div class="tiny soft" style="font-weight:500">Timer pauses if you leave the app</div></span>
         <button class="toggle ${u.deep ? 'on' : ''}" data-act="setup" data-arg="deep" aria-pressed="${!!u.deep}" aria-label="Deep Focus"></button></div>
       <p class="small soft">Put your phone face down. If you leave the app, the timer waits for you, and staying the whole time earns bonus Glow.</p>
     </div>
@@ -712,6 +713,7 @@ function renderFocus() {
 
 let lastTimerText = '';
 function updateFocusText() {
+  if (S.activeSession?.lastSeen && Date.now() - S.activeSession.lastSeen > GRACE_SECONDS * 1000) heartbeat();
   const a = S.activeSession || S.activeBreak, el = document.getElementById('timer');
   if (!a || !el) return;
   if (!S.activeSession) {
@@ -876,11 +878,11 @@ function startSession() {
       Object.assign(s.settings, { pomoFocus: u.pomoFocus, pomoShort: u.pomoShort, pomoLong: u.pomoLong, pomoEvery: u.pomoEvery, pomoAuto: u.pomoAuto });
       s.pomo = { cycle: 1, category: u.category };
       s.activeBreak = null;
-      s.activeSession = { mode: 'countdown', pomo: true, deep: !!u.deep, category: u.category, startDate: Date.now(), target: u.pomoFocus * 60, pausedTotal: 0, pausedAt: null };
+      s.activeSession = { mode: 'countdown', pomo: true, deep: !!u.deep, category: u.category, startDate: Date.now(), lastSeen: Date.now(), target: u.pomoFocus * 60, pausedTotal: 0, pausedAt: null };
       return;
     }
     s.pomo = null;
-    s.activeSession = { mode: u.mode, deep: !!u.deep, category: u.category, startDate: Date.now(), target: u.mode === 'countdown' ? u.minutes * 60 : null, pausedTotal: 0, pausedAt: null };
+    s.activeSession = { mode: u.mode, deep: !!u.deep, category: u.category, startDate: Date.now(), lastSeen: Date.now(), target: u.mode === 'countdown' ? u.minutes * 60 : null, pausedTotal: 0, pausedAt: null };
   });
   ui.sheet = null; lastTimerText = ''; ui.awayNotice = null;
   render();
@@ -892,33 +894,40 @@ function startSession() {
 // ---------------------------------------------------------------- Deep Focus
 const GRACE_SECONDS = 10;
 
-function onAppHidden() {
-  const a = S.activeSession;
-  if (!a || !a.deep || a.pausedAt || a.awayAt) return;
-  a.awayAt = Date.now();
-  G.save(S);
-}
-
-/** Deep Focus: time away (beyond a short grace) doesn't count, and the timer waits. */
-function onAppVisible() {
-  const a = S.activeSession;
-  if (!a || !a.awayAt) return;
-  const away = (Date.now() - a.awayAt) / 1000;
-  delete a.awayAt;
-  if (away > GRACE_SECONDS) {
-    a.pausedTotal += away;
-    a.awaySeconds = (a.awaySeconds || 0) + away;
-    a.interruptions = (a.interruptions || 0) + 1;
-    ui.awayNotice = away;
-    clearTimeout(onAppVisible.t);
-    onAppVisible.t = setTimeout(() => { ui.awayNotice = null; if (S.activeSession) renderLayer(); }, 9000);
+/**
+ * Deep Focus away detection. iPhone stops running a web app as soon as it leaves the screen
+ * (switching apps, locking, or iOS closing it), so a gap in this once-a-second heartbeat means the
+ * player was away. This works even when iOS doesn't deliver the "page hidden" event.
+ */
+function heartbeat() {
+  const a = S.activeSession, now = Date.now();
+  if (!a) return;
+  const gap = a.lastSeen ? (now - a.lastSeen) / 1000 : 0;
+  a.lastSeen = now;
+  if (!a.deep || a.pausedAt || gap <= GRACE_SECONDS) {
+    if (!heartbeat.saved || now - heartbeat.saved > 5000) { heartbeat.saved = now; G.save(S); }
+    return;
   }
+  a.pausedTotal += gap;
+  a.awaySeconds = (a.awaySeconds || 0) + gap;
+  a.interruptions = (a.interruptions || 0) + 1;
+  ui.awayNotice = gap;
+  clearTimeout(heartbeat.t);
+  heartbeat.t = setTimeout(() => { ui.awayNotice = null; if (S.activeSession) renderLayer(); }, 9000);
   lastTimerText = '';
   G.save(S);
+  if (ui.reward === null && !ui.sheet) renderLayer();
 }
 
+function onAppHidden() {
+  const a = S.activeSession;
+  if (a) { a.lastSeen = Date.now(); G.save(S); }
+}
+
+const onAppVisible = () => heartbeat();
 
 function finishSession(at = Date.now()) {
+  if (at >= Date.now() - 1000) heartbeat();
   const a = S.activeSession;
   if (!a) return;
   const seconds = Math.floor(G.elapsed(a, at));
@@ -953,7 +962,7 @@ function checkCompletion() {
     if (S.settings.pomoAuto) startNextRound();
   }
   const a = S.activeSession;
-  if (!a || a.mode !== 'countdown' || a.pausedAt || a.awayAt) return;
+  if (!a || a.mode !== 'countdown' || a.pausedAt) return;
   const end = G.endDate(a);
   if (end && Date.now() >= end) finishSession(end);
 }
@@ -1000,7 +1009,7 @@ function startNextRound() {
     const wasLong = s.activeBreak?.kind === 'long' || s.pomo.cycle % s.settings.pomoEvery === 0;
     s.pomo.cycle = wasLong ? 1 : s.pomo.cycle + 1;
     s.activeBreak = null;
-    s.activeSession = { mode: 'countdown', pomo: true, deep: s.settings.deepFocus, category: s.pomo.category, startDate: Date.now(), target: s.settings.pomoFocus * 60, pausedTotal: 0, pausedAt: null };
+    s.activeSession = { mode: 'countdown', pomo: true, deep: s.settings.deepFocus, category: s.pomo.category, startDate: Date.now(), lastSeen: Date.now(), target: s.settings.pomoFocus * 60, pausedTotal: 0, pausedAt: null };
   });
   lastTimerText = ''; ui.awayNotice = null;
   Sound.setAmbient(S.settings.ambient, S.settings.ambientVolume);
@@ -1172,7 +1181,7 @@ const actions = {
   pause: () => { commit((s) => { s.activeSession.pausedAt = Date.now(); }); Sound.stopAmbient(); lastTimerText = ''; },
   resume: () => {
     Sound.unlock();
-    commit((s) => { const a = s.activeSession; a.pausedTotal += (Date.now() - a.pausedAt) / 1000; a.pausedAt = null; });
+    commit((s) => { const a = s.activeSession; a.pausedTotal += (Date.now() - a.pausedAt) / 1000; a.pausedAt = null; a.lastSeen = Date.now(); });
     Sound.setAmbient(S.settings.ambient, S.settings.ambientVolume); lastTimerText = '';
   },
   cycleAmbient: () => {
@@ -1326,7 +1335,9 @@ document.addEventListener('visibilitychange', () => {
     publishNow();
   }
 });
-setInterval(checkCompletion, 1000);
+setInterval(() => { heartbeat(); checkCompletion(); }, 1000);
+window.addEventListener('pageshow', () => { heartbeat(); checkCompletion(); });
+window.addEventListener('pagehide', onAppHidden);
 
 // ---------------------------------------------------------------- Drawing loop
 function sizeCanvas(c) {
