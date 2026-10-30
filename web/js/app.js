@@ -516,7 +516,6 @@ function renderSheet() {
   if (s.type === 'settings') return sheetSettings();
   if (s.type === 'chapter') return sheetChapter(byId(CHAPTERS, s.arg));
   if (s.type === 'join') return sheetJoin();
-  if (s.type === 'shortcut') return sheetShortcut();
   return '';
 }
 
@@ -536,8 +535,6 @@ function sheetSetup() {
       <div class="row"><span style="color:var(--amber)">${icon('moon', 20)}</span><span class="spacer label">Deep Focus</span>
         <button class="toggle ${u.deep ? 'on' : ''}" data-act="setup" data-arg="deep" aria-pressed="${!!u.deep}" aria-label="Deep Focus"></button></div>
       <p class="small soft">Put your phone face down. If you leave the app, the timer waits for you, and staying the whole time earns bonus Glow.</p>
-      ${S.settings.focusShortcut ? `<p class="small" style="color:var(--moss)">${icon('check', 14)} Do Not Disturb will turn on when you start.</p>`
-        : `<button class="small" style="color:var(--amber);font-weight:700;text-align:left" data-act="openSheet" data-arg="shortcut">Also silence notifications with Do Not Disturb →</button>`}
     </div>
     <div class="stack" style="gap:10px"><div class="caps">Ambience</div><div class="chips">${Object.entries(AMBIENCE).map(([k, a]) => `<button class="chip ${u.ambient === k ? 'on' : ''}" data-act="setup" data-arg="amb:${k}">${icon(a.icon, 16)}${a.title}</button>`).join('')}</div></div>
   </div>`;
@@ -651,9 +648,7 @@ function sheetSettings() {
       ${step('pomoLong', 'Long break', `${s.pomoLong} min`, 5)}${step('pomoEvery', 'Rounds per cycle', s.pomoEvery, 1)}
       ${tog('pomoAuto', 'Start next round or break automatically')}</div>
     <div class="caps">Focus helpers</div><div class="card" style="padding:0 16px">
-      ${tog('deepFocus', 'Deep Focus by default')}
-      <div class="form-row"><span class="spacer">Do Not Disturb shortcut<div class="tiny soft">${s.focusShortcut ? 'On: runs when a session starts' : 'Off'}</div></span>
-        <button class="label" style="color:var(--amber)" data-act="openSheet" data-arg="shortcut">Set up</button></div></div>
+      ${tog('deepFocus', 'Deep Focus by default')}</div>
     <div class="caps">Sound</div><div class="card" style="padding:0 16px">
       ${sel('ambient', 'Ambience', Object.entries(AMBIENCE).map(([k, a]) => [k, a.title]))}
       <div class="form-row"><span>Volume</span><input type="range" min="0" max="1" step="0.05" value="${s.ambientVolume}" data-set="ambientVolume" aria-label="Ambience volume"></div>
@@ -892,21 +887,10 @@ function startSession() {
   Sound.setAmbient(S.settings.ambient, S.settings.ambientVolume);
   sfx('start');
   keepAwake(true);
-  launchFocusShortcut();
 }
 
-// ---------------------------------------------------------------- Deep Focus & Do Not Disturb
-const SHORTCUT_NAME = 'Ember Focus';
+// ---------------------------------------------------------------- Deep Focus
 const GRACE_SECONDS = 10;
-
-/** Opens the user's "Ember Focus" shortcut, passing the session length in minutes. */
-function launchFocusShortcut(test = false) {
-  if (!S.settings.focusShortcut && !test) return;
-  const a = S.activeSession;
-  const minutes = test ? 1 : a?.target ? Math.ceil(G.remaining(a) / 60) : 180;
-  ui.shortcutUntil = Date.now() + 90e3; // returning from Shortcuts isn't "leaving"
-  location.href = `shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME)}&input=text&text=${minutes}`;
-}
 
 function onAppHidden() {
   const a = S.activeSession;
@@ -920,9 +904,8 @@ function onAppVisible() {
   const a = S.activeSession;
   if (!a || !a.awayAt) return;
   const away = (Date.now() - a.awayAt) / 1000;
-  const viaShortcut = ui.shortcutUntil && a.awayAt <= ui.shortcutUntil && away < 90;
   delete a.awayAt;
-  if (away > GRACE_SECONDS && !viaShortcut) {
+  if (away > GRACE_SECONDS) {
     a.pausedTotal += away;
     a.awaySeconds = (a.awaySeconds || 0) + away;
     a.interruptions = (a.interruptions || 0) + 1;
@@ -934,23 +917,6 @@ function onAppVisible() {
   G.save(S);
 }
 
-function sheetShortcut() {
-  const on = S.settings.focusShortcut;
-  const step = (n, html) => `<div class="row" style="align-items:flex-start;gap:12px"><span class="orb-sm" style="background:var(--amber-glow);color:var(--ink-fixed);font-weight:800;font-size:14px">${n}</span><div class="small" style="padding-top:5px">${html}</div></div>`;
-  const body = `<div class="stack" style="gap:14px">
-    <p class="small soft">Create a Shortcut once, and Ember Grove will turn on <b>Do Not Disturb</b> for exactly as long as your session whenever you start focusing.</p>
-    <div class="card stack" style="gap:12px">
-      ${step(1, 'Open the <b>Shortcuts</b> app, tap <b>+</b>, and name the shortcut exactly <b>Ember Focus</b> (tap the name at the top).')}
-      ${step(2, 'Tap <b>Add Action</b>, search for <b>Adjust Date</b> and add it. Set it to <b>Add</b>, tap the number and choose <b>Shortcut Input</b>, set the unit to <b>minutes</b>, and make the date <b>Current Date</b>.')}
-      ${step(3, 'Add the action <b>Set Focus</b>. Set it to turn <b>Do Not Disturb On</b>, tap <b>Turned Off</b> and choose <b>Time</b>, then pick <b>Adjusted Date</b>.')}
-      ${step(4, 'Tap <b>Done</b>. Then switch on the toggle below and tap <b>Test it</b>.')}
-    </div>
-    <p class="small soft">Tip: instead of Do Not Disturb you can choose your own Focus (iPhone Settings → Focus) that allows only the people and apps you want.</p>
-    <div class="card row"><span class="spacer label">Turn on Do Not Disturb when I start</span>
-      <button class="toggle ${on ? 'on' : ''}" data-act="toggleSetting" data-arg="focusShortcut" aria-pressed="${on}" aria-label="Use the Ember Focus shortcut"></button></div>
-    <p class="tiny soft">After the shortcut runs, tap <b>◀ Ember Grove</b> in the top-left corner if you're not brought back automatically. It doesn't count as leaving.</p></div>`;
-  return sheetFrame('Do Not Disturb', body, `<button class="btn ${on ? '' : 'secondary'}" data-act="testShortcut">${icon('moon', 20)} Test it (1 minute)</button>`);
-}
 
 function finishSession(at = Date.now()) {
   const a = S.activeSession;
@@ -1040,7 +1006,6 @@ function startNextRound() {
   Sound.setAmbient(S.settings.ambient, S.settings.ambientVolume);
   sfx('start');
   keepAwake(true);
-  launchFocusShortcut();
 }
 
 function renderBreak() {
@@ -1200,7 +1165,6 @@ const actions = {
     renderLayer();
   },
   startFocus: () => startSession(),
-  testShortcut: () => { if (!S.settings.focusShortcut) commit((s) => { s.settings.focusShortcut = true; }); launchFocusShortcut(true); },
   startBreak: () => startBreak(),
   skipBreak: () => startNextRound(),
   nextRound: () => startNextRound(),
