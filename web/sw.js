@@ -1,7 +1,7 @@
 // Offline support: serve the app shell from cache, refresh it in the background.
 const CACHE = 'ember-grove-v1';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'js/app.js', 'js/game.js', 'js/content.js', 'js/ember.js',
-  'js/grove.js', 'js/audio.js', 'js/icons.js', 'js/config.js', 'js/leaderboard.js', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
+  'js/grove.js', 'js/audio.js', 'js/icons.js', 'js/config.js', 'js/leaderboard.js', 'js/namefilter.js', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));

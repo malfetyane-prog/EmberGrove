@@ -475,7 +475,8 @@ function renderBoard() {
       <input type="text" id="lbName" maxlength="20" placeholder="Your name" autocomplete="nickname" aria-label="Your leaderboard name">
       ${b.joinError ? `<div class="small" style="color:var(--coral)">${esc(b.joinError)}</div>` : ''}
       <button class="btn" data-act="lbJoin" data-arg="lbName" ${b.joining ? 'disabled' : ''}>${b.joining ? 'Joining…' : `${icon('star', 20)} Join`}</button></div>`;
-  const rows = b.rows || [];
+  const reported = S.reported || [];
+  const rows = (b.rows || []).filter((r) => !reported.includes(r.id));
   const medal = ['#F2C14E', '#C9CDE0', '#D9925A'];
   const list = b.loading && !b.rows ? '<p class="small soft center">Loading…</p>'
     : b.error ? `<p class="small center" style="color:var(--coral)">${esc(b.error)}</p>`
@@ -487,13 +488,14 @@ function renderBoard() {
         ${emberCv(safeLook(r.appearance), 'idle', 42, false)}
         <span class="spacer" style="min-width:0"><div class="label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.name)} <span class="soft small">#${esc(r.tag)}</span>${mine ? ' <span class="small" style="color:var(--amber)">(you)</span>' : ''}</div>
         <div class="tiny soft">Lv ${esc(r.level)} · ${esc(r.stage || 'Spark')}</div></span>
-        <b style="font-variant-numeric:tabular-nums">${fmtMin(mins | 0)}</b></div>`;
+        <b style="font-variant-numeric:tabular-nums">${fmtMin(mins | 0)}</b>
+        ${mine ? '' : `<button data-act="lbReport" data-arg="${esc(r.id)}" aria-label="Report ${esc(r.name)}" class="soft" style="width:30px;height:30px;display:grid;place-items:center;margin-right:-6px;opacity:.6">${icon('flag', 16)}</button>`}</div>`;
     }).join('');
   return `${join}
     <div class="row"><div class="seg spacer"><button class="${b.scope === 'week' ? 'on' : ''}" data-act="lbScope" data-arg="week">This week</button><button class="${b.scope === 'all' ? 'on' : ''}" data-act="lbScope" data-arg="all">All time</button></div>
       <button data-act="lbRefresh" aria-label="Refresh" style="width:40px;height:36px;display:grid;place-items:center;color:var(--ink-soft)">${icon('clock', 20)}</button></div>
     <div class="stack" style="gap:8px">${list}</div>
-    <p class="tiny soft center">Ranked by focus minutes. The weekly board starts fresh every Monday.<br>Only your name, ${nm()}'s look and level, and your focus minutes are shared.</p>
+    <p class="tiny soft center">See a name that isn't okay? Tap ${icon('flag', 12)} to report it.<br>Ranked by focus minutes. The weekly board starts fresh every Monday.<br>Only your name, ${nm()}'s look and level, and your focus minutes are shared.</p>
     ${me ? '<button class="small soft center" data-act="lbLeave" style="padding:8px">Leave the leaderboard</button>' : ''}`;
 }
 
@@ -1049,7 +1051,8 @@ const actions = {
       return;
     } catch (e) {
       S.profile = null; G.save(S);
-      b.joinError = /anonymous/i.test(e.message) ? `The leaderboard needs anonymous sign-ins turned on in Supabase. (${e.message})`
+      b.joinError = LB.isNameRejection(e) ? LB.FRIENDLIER
+        : /anonymous/i.test(e.message) ? `The leaderboard needs anonymous sign-ins turned on in Supabase. (${e.message})`
         : /failed to fetch|load failed|network/i.test(e.message) ? `Couldn't reach the leaderboard. Check your connection and try again. (${e.message})`
         : `Couldn't join: ${e.message}`;
     }
@@ -1061,8 +1064,31 @@ const actions = {
   lbSaveName: async () => {
     const v = (document.getElementById('dlgInput')?.value || '').trim(), problem = LB.nameProblem(v);
     if (problem) { ui.dialog.body = problem; renderLayer(); return; }
+    const old = S.profile.name;
     ui.dialog = null; S.profile.name = v; G.save(S); render();
-    await publishNow(true); loadBoard();
+    try { await LB.publish(S.profile, boardRow()); G.save(S); }
+    catch (e) {
+      if (LB.isNameRejection(e)) {
+        S.profile.name = old; G.save(S);
+        ui.dialog = { title: 'Change your leaderboard name', body: LB.FRIENDLIER, input: v, inputMax: 20, buttons: [{ label: 'Save', act: 'lbSaveName' }, { label: 'Cancel', act: 'closeDialog', secondary: true }] };
+        render(); return;
+      }
+    }
+    loadBoard();
+  },
+  lbReport: (id) => {
+    const r = (ui.board.rows || []).find((x) => x.id === id);
+    if (!r) return;
+    ui.dialog = { title: `Report "${r.name}"?`, body: "If several players report a name, it's hidden from the leaderboard. You won't see it again either way.",
+      buttons: [{ label: 'Report name', act: 'lbReportNow', arg: id, secondary: true, danger: true }, { label: 'Cancel', act: 'closeDialog' }] };
+    renderLayer();
+  },
+  lbReportNow: async (id) => {
+    ui.dialog = null;
+    S.reported = [...new Set([...(S.reported || []), id])]; G.save(S); render();
+    try { await LB.report(S.profile || (S.reporter ||= {}), id); G.save(S); } catch (e) { console.warn('Report failed', e); }
+    ui.banner = { icon: 'flag', title: 'Thanks for reporting', sub: "That name won't show on your board anymore." };
+    renderLayer(); clearTimeout(showBanner.t); showBanner.t = setTimeout(() => { ui.banner = null; renderLayer(); }, 3500);
   },
   lbLeave: () => { ui.dialog = { title: 'Leave the leaderboard?', body: 'Your entry will be removed. You can join again any time.', buttons: [{ label: 'Leave', act: 'lbLeaveNow', secondary: true, danger: true }, { label: 'Stay', act: 'closeDialog' }] }; renderLayer(); },
   lbLeaveNow: async () => {

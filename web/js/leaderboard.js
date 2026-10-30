@@ -1,17 +1,20 @@
 // Leaderboard: anonymous Supabase accounts (no email), one public row per player.
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
+import { isNameClean } from './namefilter.js';
 
 export const enabled = () => !!SUPABASE_KEY;
 
-const BLOCKED = ['fuck', 'shit', 'bitch', 'cunt', 'nigg', 'fag', 'rape', 'nazi', 'whore', 'slut', 'dick', 'pussy', 'asshole', 'retard'];
+export const FRIENDLIER = 'Please choose a friendlier name.';
 export function nameProblem(name) {
   const n = name.trim();
   if (n.length < 2) return 'Use at least 2 characters.';
   if (n.length > 20) return 'Keep it to 20 characters or fewer.';
-  const flat = n.toLowerCase().replace(/[^a-z]/g, '').replace(/0/g, 'o');
-  if (BLOCKED.some((w) => flat.includes(w))) return 'Please choose a friendlier name.';
+  if (!isNameClean(n)) return FRIENDLIER;
   return null;
 }
+
+/** The database rejects blocked names too (layer 2); turn its error into the same friendly text. */
+export const isNameRejection = (e) => /name_not_allowed/i.test(e?.message || '');
 
 async function call(path, { method = 'GET', body, token, prefer } = {}) {
   const headers = { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' };
@@ -62,7 +65,23 @@ export async function fetchBoard(profile, scope, weekKey) {
   const q = scope === 'week'
     ? `week_key=eq.${encodeURIComponent(weekKey)}&week_minutes=gt.0&order=week_minutes.desc,updated_at.asc`
     : 'total_minutes=gt.0&order=total_minutes.desc,updated_at.asc';
-  return call(`/rest/v1/players?select=${cols}&${q}&limit=50`, { token: t });
+  try {
+    return await call(`/rest/v1/players?select=${cols}&${q}&hidden=is.false&banned=is.false&limit=50`, { token: t });
+  } catch (e) {
+    // Before the safety SQL is installed the hidden/banned columns don't exist yet.
+    if (/hidden|banned/.test(e.message)) return call(`/rest/v1/players?select=${cols}&${q}&limit=50`, { token: t });
+    throw e;
+  }
+}
+
+/** Reports a player's name. Three reports from different players hide it automatically. */
+export async function report(profile, playerId) {
+  const t = await token(profile);
+  try {
+    await call('/rest/v1/reports', { method: 'POST', token: t, prefer: 'return=minimal', body: { player: playerId } });
+  } catch (e) {
+    if (!/duplicate|23505/i.test(e.message)) throw e; // already reported by this player: fine
+  }
 }
 
 export async function leave(profile) {

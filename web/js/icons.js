@@ -39,6 +39,7 @@ const P = {
   clover: '<circle cx="9" cy="9" r="3"/><circle cx="15" cy="9" r="3"/><circle cx="9" cy="15" r="3"/><circle cx="15" cy="15" r="3"/><path d="M12 12l5 9"/>',
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
   flower: '<circle cx="12" cy="9" r="2.5"/><path d="M12 4a2.5 2.5 0 0 1 0 5 2.5 2.5 0 0 1 5 0 2.5 2.5 0 0 1-5 0 2.5 2.5 0 0 1-5 0 2.5 2.5 0 0 1 5 0zM12 12v9M12 17c-2 0-4-1-4-3"/>',
+  flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
   circle: '<circle cx="12" cy="12" r="9"/>',
   ring: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
   feather: '<path d="M20 4C10 4 5 10 5 19l2-2c4 0 10-3 13-13z"/><path d="M5 19L15 9"/>',
