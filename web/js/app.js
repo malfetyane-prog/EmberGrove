@@ -429,7 +429,7 @@ async function loadBoard() {
   b.loading = true; b.error = null;
   if (ui.tab === 'stats') render();
   try { b.rows = await LB.fetchBoard(S.profile || {}, b.scope, G.weekKey(Date.now())); G.save(S); }
-  catch (e) { b.error = "Couldn't load the leaderboard. Check your connection and try again."; }
+  catch (e) { b.error = `Couldn't load the leaderboard: ${e.message}`; }
   b.loading = false;
   if (ui.tab === 'stats') render();
 }
@@ -992,7 +992,9 @@ const actions = {
       await loadBoard();
     } catch (e) {
       S.profile = null; G.save(S);
-      b.joinError = /anonymous/i.test(e.message) ? 'The leaderboard needs anonymous sign-ins turned on in Supabase.' : "Couldn't join right now. Check your connection and try again.";
+      b.joinError = /anonymous/i.test(e.message) ? `The leaderboard needs anonymous sign-ins turned on in Supabase. (${e.message})`
+        : /failed to fetch|load failed|network/i.test(e.message) ? `Couldn't reach the leaderboard. Check your connection and try again. (${e.message})`
+        : `Couldn't join: ${e.message}`;
     }
     b.joining = false; render();
   },
