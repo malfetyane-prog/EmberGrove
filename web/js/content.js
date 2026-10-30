@@ -242,6 +242,7 @@ export const ACHIEVEMENTS = [
   { id: 'tenHours', title: 'Kindled', blurb: 'Focus for 10 hours in total.', icon: 'flame' },
   { id: 'fiftyHours', title: 'Bonfire', blurb: 'Focus for 50 hours in total.', icon: 'sun' },
   { id: 'hundredHours', title: 'Eternal Flame', blurb: 'Focus for 100 hours in total.', icon: 'star' },
+  { id: 'fullCycle', title: 'Full Cycle', blurb: 'Complete a full Pomodoro cycle of focus rounds.', icon: 'clock' },
   { id: 'deepDive', title: 'Deep Dive', blurb: 'Focus for 60 minutes in one session.', icon: 'drop' },
   { id: 'earlyBird', title: 'Early Bird', blurb: 'Start a session before 8 AM.', icon: 'sun' },
   { id: 'nightOwl', title: 'Night Owl', blurb: 'Finish a session after 10 PM.', icon: 'moon' },

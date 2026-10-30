@@ -14,6 +14,7 @@ export function defaultSettings() {
     defaultMode: 'countdown', defaultMinutes: 25, defaultCategory: 'studying', dailyGoalMinutes: 60,
     ambient: 'campfire', ambientVolume: 0.6, soundEffects: true, keepScreenAwake: true,
     reduceMotion: false, appearance: 'system', hasOnboarded: false,
+    pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoEvery: 4, pomoAuto: false,
   };
 }
 
@@ -25,6 +26,7 @@ export function newState() {
     restored: {}, restoredOrder: [], unlockedAreas: ['clearing'], ownedDecorations: [], hiddenDecorations: [],
     friendship: {}, curios: {}, chapters: {}, chaptersRead: [], achievements: {}, claimedQuests: [],
     sessions: [], journal: [], activeSession: null, settings: defaultSettings(),
+    pomo: null, activeBreak: null, pomoSets: 0,
   };
 }
 
@@ -366,6 +368,7 @@ function isEarned(s, id) {
     case 'trueFriend': return COMPANIONS.some((cp) => hearts(s, cp.id) >= 10);
     case 'collector': return Object.keys(s.curios).length >= 12;
     case 'rekindled': return Object.keys(s.restored).length >= LANDMARKS.length;
+    case 'fullCycle': return (s.pomoSets || 0) >= 1;
   }
   return false;
 }

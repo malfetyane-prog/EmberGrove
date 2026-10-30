@@ -89,6 +89,7 @@ function renderLayer() {
   if (!S.settings.hasOnboarded) html += renderOnboarding();
   else if (ui.reward) html += renderReward();
   else if (S.activeSession) html += renderFocus();
+  else if (S.activeBreak) html += renderBreak();
   if (ui.sheet) html += `<div class="backdrop" data-act="closeSheet"></div>${renderSheet()}`;
   if (ui.dialog) html += renderDialog();
   if (ui.banner) html += `<div class="banner" data-act="dismissBanner"><span style="color:var(--amber)">${icon(ui.banner.icon, 24)}</span><div><div class="label">${esc(ui.banner.title)}</div><div class="small soft">${esc(ui.banner.sub)}</div></div></div>`;
@@ -164,8 +165,8 @@ function renderHome() {
     </div>
   </div></div>
   <div class="cta">
-    <button class="btn" data-act="openSheet" data-arg="setup">${icon('flame', 22)} ${S.activeSession ? 'Return to focus' : 'Begin focusing'}</button>
-    <div class="center tiny soft" style="margin-top:6px">${set.defaultMode === 'countdown' ? `${set.defaultMinutes} min` : 'Stopwatch'} · ${CATEGORIES[set.defaultCategory].title}</div>
+    <button class="btn" data-act="openSheet" data-arg="setup">${icon('flame', 22)} ${S.activeSession || S.activeBreak ? 'Return to focus' : 'Begin focusing'}</button>
+    <div class="center tiny soft" style="margin-top:6px">${set.defaultMode === 'countdown' ? `${set.defaultMinutes} min` : set.defaultMode === 'pomodoro' ? `Pomodoro ${set.pomoFocus}/${set.pomoShort}` : 'Stopwatch'} · ${CATEGORIES[set.defaultCategory].title}</div>
   </div>`;
 }
 
@@ -417,8 +418,8 @@ function sheetSetup() {
   const body = `<div class="stack" style="gap:22px">
     <div class="row" style="gap:12px">${emberCv(G.appearance(S), 'curious', 84)}<div><div class="h2">What are we focusing on?</div><div class="small soft">${nm()} will keep the fire going.</div></div></div>
     <div class="stack" style="gap:10px"><div class="caps">Mode</div><div class="seg">
-      <button class="${u.mode === 'countdown' ? 'on' : ''}" data-act="setup" data-arg="mode:countdown">Timer</button><button class="${u.mode === 'stopwatch' ? 'on' : ''}" data-act="setup" data-arg="mode:stopwatch">Stopwatch</button></div></div>
-    ${u.mode === 'countdown' ? `<div class="stack" style="gap:10px"><div class="caps">Length</div><div class="chips">
+      <button class="${u.mode === 'countdown' ? 'on' : ''}" data-act="setup" data-arg="mode:countdown">Timer</button><button class="${u.mode === 'pomodoro' ? 'on' : ''}" data-act="setup" data-arg="mode:pomodoro">Pomodoro</button><button class="${u.mode === 'stopwatch' ? 'on' : ''}" data-act="setup" data-arg="mode:stopwatch">Stopwatch</button></div></div>
+    ${u.mode === 'pomodoro' ? pomoSetup(u) : u.mode === 'countdown' ? `<div class="stack" style="gap:10px"><div class="caps">Length</div><div class="chips">
       ${presets.map((p) => `<button class="chip ${!u.custom && u.minutes === p ? 'on' : ''}" data-act="setup" data-arg="min:${p}">${p}m</button>`).join('')}
       <button class="chip ${u.custom ? 'on' : ''}" data-act="setup" data-arg="custom">Custom</button></div>
       ${u.custom ? `<div class="card row"><span class="label spacer">${u.minutes} minutes</span><div class="stepper"><button data-act="setup" data-arg="step:-5" aria-label="Less">−</button><button data-act="setup" data-arg="step:5" aria-label="More">+</button></div></div>` : ''}</div>`
@@ -426,7 +427,23 @@ function sheetSetup() {
     <div class="stack" style="gap:10px"><div class="caps">Category</div><div class="chips">${Object.entries(CATEGORIES).map(([k, c]) => `<button class="chip ${u.category === k ? 'on' : ''}" style="--chip:${c.color}" data-act="setup" data-arg="cat:${k}">${icon(c.icon, 16)}${c.title}</button>`).join('')}</div></div>
     <div class="stack" style="gap:10px"><div class="caps">Ambience</div><div class="chips">${Object.entries(AMBIENCE).map(([k, a]) => `<button class="chip ${u.ambient === k ? 'on' : ''}" data-act="setup" data-arg="amb:${k}">${icon(a.icon, 16)}${a.title}</button>`).join('')}</div></div>
   </div>`;
-  return sheetFrame('Focus', body, `<button class="btn" data-act="startFocus">${icon('flame', 20)} ${u.mode === 'countdown' ? `Focus for ${u.minutes} minutes` : 'Start stopwatch'}</button>`);
+  const label = u.mode === 'countdown' ? `Focus for ${u.minutes} minutes` : u.mode === 'pomodoro' ? `Start round 1 of ${u.pomoEvery}` : 'Start stopwatch';
+  return sheetFrame('Focus', body, `<button class="btn" data-act="startFocus">${icon('flame', 20)} ${label}</button>`);
+}
+
+const POMO_PRESETS = [['Classic', 25, 5, 15], ['Deep', 50, 10, 20], ['Gentle', 15, 3, 10]];
+function pomoSetup(u) {
+  const preset = POMO_PRESETS.find(([, f, sh, l]) => u.pomoFocus === f && u.pomoShort === sh && u.pomoLong === l);
+  const stepRow = (key, label, val, d) => `<div class="form-row"><span class="spacer">${label}: <b>${val}</b></span><div class="stepper">
+    <button data-act="setup" data-arg="pstep:${key}:${-d}" aria-label="Less">−</button><button data-act="setup" data-arg="pstep:${key}:${d}" aria-label="More">+</button></div></div>`;
+  return `<div class="stack" style="gap:10px"><div class="caps">Rhythm</div><div class="chips">
+    ${POMO_PRESETS.map(([n, f, sh, l]) => `<button class="chip ${preset && preset[0] === n ? 'on' : ''}" data-act="setup" data-arg="preset:${f},${sh},${l}">${n} ${f}/${sh}</button>`).join('')}
+    <button class="chip ${preset ? '' : 'on'}" data-act="setup" data-arg="pcustom">Custom</button></div>
+    ${preset && !u.pomoCustom ? '' : `<div class="card" style="padding:0 16px">${stepRow('pomoFocus', 'Focus', `${u.pomoFocus} min`, 5)}${stepRow('pomoShort', 'Short break', `${u.pomoShort} min`, 1)}
+      ${stepRow('pomoLong', 'Long break', `${u.pomoLong} min`, 5)}${stepRow('pomoEvery', 'Rounds per cycle', u.pomoEvery, 1)}</div>`}
+    <div class="row small soft" style="gap:6px;flex-wrap:wrap">${Array.from({ length: u.pomoEvery }, (_, i) => `<span class="pill" style="padding:4px 8px">${icon('flame', 12)} ${u.pomoFocus}m</span>${i < u.pomoEvery - 1 ? `<span>${u.pomoShort}m rest</span>` : ''}`).join('')}<span>then ${u.pomoLong}m long rest</span></div>
+    <div class="row"><span class="spacer small">Start the next round or break automatically</span><button class="toggle ${u.pomoAuto ? 'on' : ''}" data-act="setup" data-arg="pauto" aria-pressed="${u.pomoAuto}" aria-label="Auto-start"></button></div>
+    <p class="small soft">Work in focused rounds with short rests between them. Every round grows ${nm()}, and you can stop after any round.</p></div>`;
 }
 
 function sheetRestore() {
@@ -494,11 +511,15 @@ function sheetSettings() {
   const sel = (key, label, opts) => `<div class="form-row"><span class="spacer">${label}</span><select data-set="${key}">${opts.map(([v, l]) => `<option value="${v}" ${s[key] === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
   const body = `<div class="stack">
     <div class="caps">Focus timer</div><div class="card" style="padding:0 16px">
-      ${sel('defaultMode', 'Default mode', [['countdown', 'Timer'], ['stopwatch', 'Stopwatch']])}
+      ${sel('defaultMode', 'Default mode', [['countdown', 'Timer'], ['pomodoro', 'Pomodoro'], ['stopwatch', 'Stopwatch']])}
       ${step('defaultMinutes', 'Default length', `${s.defaultMinutes} min`, 5)}
       ${sel('defaultCategory', 'Default category', Object.entries(CATEGORIES).map(([k, c]) => [k, c.title]))}
       ${step('dailyGoalMinutes', 'Daily goal', fmtMin(s.dailyGoalMinutes), 15)}
       ${tog('keepScreenAwake', 'Keep screen awake while focusing')}</div>
+    <div class="caps">Pomodoro</div><div class="card" style="padding:0 16px">
+      ${step('pomoFocus', 'Focus round', `${s.pomoFocus} min`, 5)}${step('pomoShort', 'Short break', `${s.pomoShort} min`, 1)}
+      ${step('pomoLong', 'Long break', `${s.pomoLong} min`, 5)}${step('pomoEvery', 'Rounds per cycle', s.pomoEvery, 1)}
+      ${tog('pomoAuto', 'Start next round or break automatically')}</div>
     <div class="caps">Sound</div><div class="card" style="padding:0 16px">
       ${sel('ambient', 'Ambience', Object.entries(AMBIENCE).map(([k, a]) => [k, a.title]))}
       <div class="form-row"><span>Volume</span><input type="range" min="0" max="1" step="0.05" value="${s.ambientVolume}" data-set="ambientVolume" aria-label="Ambience volume"></div>
@@ -548,6 +569,7 @@ function renderFocus() {
       <div id="timer" class="timer" role="timer">--:--</div>
       ${a.target ? `<div style="width:220px;margin:12px auto 0"><div class="bar thin"><i id="fbar" style="width:0%;transition:none"></i></div></div>` : ''}
       <p id="fline" class="center" style="color:var(--lavender);margin-top:12px;font-size:16px"></p>
+      ${a.pomo && S.pomo ? roundDots(S.pomo.cycle, S.settings.pomoEvery, true) : ''}
       <div class="spacer"></div>
       <div class="row" style="justify-content:center;gap:28px">
         <button class="round-btn" data-act="${a.pausedAt ? 'resume' : 'pause'}" aria-label="${a.pausedAt ? 'Resume' : 'Pause'}">${icon(a.pausedAt ? 'play' : 'pause', 30)}</button>
@@ -558,8 +580,18 @@ function renderFocus() {
 
 let lastTimerText = '';
 function updateFocusText() {
-  const a = S.activeSession, el = document.getElementById('timer');
+  const a = S.activeSession || S.activeBreak, el = document.getElementById('timer');
   if (!a || !el) return;
+  if (!S.activeSession) {
+    const txt = fmtDur(Math.ceil(G.remaining(a)));
+    if (txt !== lastTimerText) {
+      el.textContent = txt; lastTimerText = txt;
+      const fb = document.getElementById('fbar');
+      if (fb) fb.style.width = `${Math.min(100, G.progress(a) * 100)}%`;
+      document.title = `${txt} · Break · Ember Grove`;
+    }
+    return;
+  }
   const now = Date.now(), e = G.elapsed(a, now), shown = a.target ? G.remaining(a, now) : e;
   const txt = fmtDur(a.target ? Math.ceil(shown) : shown);
   if (txt !== lastTimerText) {
@@ -642,7 +674,7 @@ function renderReward() {
       ${bs.slice(0, ui.revealed).map((b, i) => beatCard(b, r).replace('class="rcard"', `class="rcard${i === ui.revealed - 1 ? ' new' : ''}"`)).join('')}
     </div>
     <div style="position:fixed;left:0;right:0;bottom:0;padding:20px var(--gutter) calc(var(--safe-bottom) + 14px);background:linear-gradient(transparent, rgba(30,22,48,.96) 40%)" class="stack">
-      ${done ? `${path ? `<button class="btn" data-act="rewardGo" data-arg="path">${icon('sparkles', 20)} Choose ${nm()}'s path</button>` : restore ? `<button class="btn" data-act="rewardGo" data-arg="restore">${icon('leaf', 20)} Restore the grove</button>` : ''}
+      ${done && r.pomo ? pomoRewardButtons(r, path, restore) : done ? `${path ? `<button class="btn" data-act="rewardGo" data-arg="path">${icon('sparkles', 20)} Choose ${nm()}'s path</button>` : restore ? `<button class="btn" data-act="rewardGo" data-arg="restore">${icon('leaf', 20)} Restore the grove</button>` : ''}
         <button class="btn ${path || restore ? 'secondary' : ''}" data-act="rewardGo" data-arg="">Back to the hearth</button>`
       : '<div class="center tiny" style="color:var(--lavender)">Tap to continue</div>'}
     </div></div>`;
@@ -708,6 +740,14 @@ function startSession() {
   commit((s) => {
     s.settings.defaultMode = u.mode; s.settings.defaultCategory = u.category; s.settings.ambient = u.ambient;
     if (u.mode === 'countdown') s.settings.defaultMinutes = u.minutes;
+    if (u.mode === 'pomodoro') {
+      Object.assign(s.settings, { pomoFocus: u.pomoFocus, pomoShort: u.pomoShort, pomoLong: u.pomoLong, pomoEvery: u.pomoEvery, pomoAuto: u.pomoAuto });
+      s.pomo = { cycle: 1, category: u.category };
+      s.activeBreak = null;
+      s.activeSession = { mode: 'countdown', pomo: true, category: u.category, startDate: Date.now(), target: u.pomoFocus * 60, pausedTotal: 0, pausedAt: null };
+      return;
+    }
+    s.pomo = null;
     s.activeSession = { mode: u.mode, category: u.category, startDate: Date.now(), target: u.mode === 'countdown' ? u.minutes * 60 : null, pausedTotal: 0, pausedAt: null };
   });
   ui.sheet = null; lastTimerText = '';
@@ -724,9 +764,18 @@ function finishSession(at = Date.now()) {
   const record = { start: a.startDate, end: at, seconds, category: a.category, mode: a.mode, reachedTarget: G.isComplete(a, at) };
   Sound.stopAmbient(); keepAwake(false); document.title = 'Ember Grove';
   ui.dialog = null;
-  if (seconds < 60) { commit((s) => { s.activeSession = null; }); return; }
-  let summary;
-  commit((s) => { s.activeSession = null; summary = G.applySession(s, record, at); });
+  if (seconds < 60) { commit((s) => { s.activeSession = null; s.pomo = null; }); return; }
+  let summary, pomo = null;
+  commit((s) => {
+    s.activeSession = null;
+    if (a.pomo && s.pomo) {
+      const every = s.settings.pomoEvery, long = s.pomo.cycle % every === 0;
+      if (long) s.pomoSets = (s.pomoSets || 0) + 1;
+      pomo = { cycle: s.pomo.cycle, every, nextBreak: long ? 'long' : 'short' };
+    }
+    summary = G.applySession(s, record, at);
+  });
+  summary.pomo = pomo;
   ui.reward = summary; ui.revealed = 0;
   renderLayer();
   sfx('complete');
@@ -734,10 +783,91 @@ function finishSession(at = Date.now()) {
 }
 
 function checkCompletion() {
+  const b = S.activeBreak;
+  if (b && !b.done && Date.now() >= G.endDate(b)) {
+    commit((s) => { s.activeBreak.done = true; });
+    sfx('discover');
+    if (S.settings.pomoAuto) startNextRound();
+  }
   const a = S.activeSession;
   if (!a || a.mode !== 'countdown' || a.pausedAt) return;
   const end = G.endDate(a);
   if (end && Date.now() >= end) finishSession(end);
+}
+
+// ---------------------------------------------------------------- Pomodoro
+const REST_TIPS = ['Stand up and stretch your arms and back.', 'Drink a glass of water.', 'Look at something far away for 20 seconds.',
+  'Take three slow, deep breaths.', 'Step outside or open a window for a moment.', 'Close your eyes and let them rest.', 'Walk around the room once or twice.'];
+
+function clampPomo(key, v) {
+  const lim = { pomoFocus: [5, 90], pomoShort: [1, 30], pomoLong: [5, 60], pomoEvery: [2, 8] }[key];
+  return Math.min(lim[1], Math.max(lim[0], v));
+}
+
+function roundDots(cycle, every, dark) {
+  return `<div class="row" style="justify-content:center;gap:8px;margin-top:14px" aria-label="Round ${cycle} of ${every}">
+    ${Array.from({ length: every }, (_, i) => `<span style="width:10px;height:10px;border-radius:50%;background:${i < cycle ? 'var(--amber)' : dark ? 'rgba(255,255,255,.25)' : 'var(--line)'};${i === cycle - 1 ? 'box-shadow:0 0 8px var(--amber)' : ''}"></span>`).join('')}
+    <span class="small" style="color:var(--lavender);margin-left:4px">Round ${cycle} of ${every}</span></div>`;
+}
+
+function pomoRewardButtons(r, path, restore) {
+  const p = r.pomo, mins = p.nextBreak === 'long' ? S.settings.pomoLong : S.settings.pomoShort;
+  return `${p.nextBreak === 'long' ? `<div class="center small" style="color:var(--amber-glow);font-weight:700">Full cycle complete: ${p.every} rounds!</div>` : ''}
+    <button class="btn" data-act="startBreak">${icon('leaf', 20)} Take a ${mins}-minute ${p.nextBreak === 'long' ? 'long ' : ''}break</button>
+    ${path ? `<button class="btn secondary" data-act="rewardGo" data-arg="path">${icon('sparkles', 20)} Choose ${nm()}'s path</button>`
+      : restore ? `<button class="btn secondary" data-act="rewardGo" data-arg="restore">${icon('leaf', 20)} Restore the grove</button>` : ''}
+    <div class="row" style="gap:10px"><button class="btn secondary" style="font-size:16px;padding:13px 10px" data-act="skipBreak">Skip break</button><button class="btn secondary" style="font-size:16px;padding:13px 10px" data-act="endPomo">Finish for now</button></div>`;
+}
+
+function startBreak() {
+  const p = ui.reward && ui.reward.pomo;
+  if (!p) return;
+  clearTimeout(ui.revealTimer); ui.reward = null;
+  const kind = p.nextBreak, mins = kind === 'long' ? S.settings.pomoLong : S.settings.pomoShort;
+  commit((s) => { s.activeBreak = { kind, startDate: Date.now(), target: mins * 60, pausedTotal: 0, pausedAt: null, tip: Math.floor(Math.random() * REST_TIPS.length) }; });
+  lastTimerText = '';
+  keepAwake(true);
+}
+
+function startNextRound() {
+  if (!S.pomo) return;
+  Sound.unlock();
+  clearTimeout(ui.revealTimer); ui.reward = null;
+  commit((s) => {
+    const wasLong = s.activeBreak?.kind === 'long' || s.pomo.cycle % s.settings.pomoEvery === 0;
+    s.pomo.cycle = wasLong ? 1 : s.pomo.cycle + 1;
+    s.activeBreak = null;
+    s.activeSession = { mode: 'countdown', pomo: true, category: s.pomo.category, startDate: Date.now(), target: s.settings.pomoFocus * 60, pausedTotal: 0, pausedAt: null };
+  });
+  lastTimerText = '';
+  Sound.setAmbient(S.settings.ambient, S.settings.ambientVolume);
+  sfx('start');
+  keepAwake(true);
+}
+
+function renderBreak() {
+  const b = S.activeBreak, long = b.kind === 'long', every = S.settings.pomoEvery;
+  const cycle = S.pomo ? S.pomo.cycle : 1, nextRound = long ? 1 : cycle + 1;
+  return `<div class="overlay" style="color-scheme:dark">
+    <canvas class="bgscene" data-kind="grove" data-live="break" data-vp="auto" data-es="130"></canvas>
+    <div class="dim-top"></div>
+    <div class="focus-ui">
+      <div class="row"><span class="ghost-pill">${icon('leaf', 16)} ${long ? 'Long break' : 'Short break'}</span><span class="spacer"></span>
+        <span class="ghost-pill">${icon('clock', 16)} Pomodoro</span></div>
+      <div style="height:6vh"></div>
+      ${b.done ? `<div class="center" style="font-size:40px;font-weight:800">Break's over</div>
+        <p class="center" style="color:var(--lavender);margin-top:10px;font-size:17px">${nm()} is stretching. Ready for round ${nextRound}?</p>`
+      : `<div id="timer" class="timer" role="timer">--:--</div>
+        <div style="width:220px;margin:12px auto 0"><div class="bar thin" style="--c:#8FCB6A"><i id="fbar" style="width:0%;transition:none"></i></div></div>
+        <p class="center" style="color:var(--lavender);margin-top:14px;font-size:16px">${long ? `A whole cycle done. ${nm()} is napping in the sun.` : `${nm()} is resting by the fire.`}</p>
+        <div class="center" style="margin-top:18px"><span class="ghost-pill">${icon('sparkles', 16)} ${REST_TIPS[b.tip || 0]}</span></div>`}
+      ${roundDots(long ? every : cycle, every, true)}
+      <div class="spacer"></div>
+      <div class="stack" style="gap:10px">
+        ${b.done ? `<button class="btn" data-act="nextRound">${icon('flame', 20)} Start round ${nextRound}</button>` : `<button class="btn" data-act="nextRound">${icon('flame', 20)} Skip break, start round ${nextRound}</button>`}
+        <button class="btn secondary" style="background:rgba(255,255,255,.12);color:var(--cream);border-color:rgba(255,255,255,.2)" data-act="endPomo">Finish for now</button>
+      </div>
+    </div></div>`;
 }
 
 // ---------------------------------------------------------------- Banner
@@ -756,10 +886,11 @@ function showBanner(ch) {
 
 // ---------------------------------------------------------------- Actions
 function openSheet(type, arg) {
-  if (type === 'setup' && S.activeSession) { render(); return; }
+  if (type === 'setup' && (S.activeSession || S.activeBreak)) { render(); return; }
   if (type === 'setup') {
     const s = S.settings;
-    ui.setup = { mode: s.defaultMode, minutes: s.defaultMinutes, category: s.defaultCategory, ambient: s.ambient, custom: ![15, 25, 45, 60].includes(s.defaultMinutes) };
+    ui.setup = { mode: s.defaultMode, minutes: s.defaultMinutes, category: s.defaultCategory, ambient: s.ambient, custom: ![15, 25, 45, 60].includes(s.defaultMinutes),
+      pomoFocus: s.pomoFocus, pomoShort: s.pomoShort, pomoLong: s.pomoLong, pomoEvery: s.pomoEvery, pomoAuto: s.pomoAuto, pomoCustom: false };
   }
   if (type === 'restore') { ui.restorePick = null; ui.restoreVariant = null; }
   if (type === 'path') ui.pathPick = 'hearth';
@@ -789,6 +920,10 @@ const actions = {
   setup: (arg) => {
     const [k, v] = arg.split(':'), u = ui.setup;
     if (k === 'mode') u.mode = v;
+    if (k === 'preset') { [u.pomoFocus, u.pomoShort, u.pomoLong] = v.split(',').map(Number); u.pomoCustom = false; }
+    if (k === 'pcustom') u.pomoCustom = true;
+    if (k === 'pauto') u.pomoAuto = !u.pomoAuto;
+    if (k === 'pstep') { const [key, d] = arg.split(':').slice(1); u[key] = clampPomo(key, u[key] + +d); u.pomoCustom = true; }
     if (k === 'min') { u.minutes = +v; u.custom = false; }
     if (k === 'custom') u.custom = true;
     if (k === 'step') u.minutes = Math.min(180, Math.max(5, u.minutes + +v));
@@ -797,6 +932,10 @@ const actions = {
     renderLayer();
   },
   startFocus: () => startSession(),
+  startBreak: () => startBreak(),
+  skipBreak: () => startNextRound(),
+  nextRound: () => startNextRound(),
+  endPomo: () => { clearTimeout(ui.revealTimer); ui.reward = null; keepAwake(false); document.title = 'Ember Grove'; commit((s) => { s.pomo = null; s.activeBreak = null; }); },
   pause: () => { commit((s) => { s.activeSession.pausedAt = Date.now(); }); Sound.stopAmbient(); lastTimerText = ''; },
   resume: () => {
     Sound.unlock();
@@ -823,6 +962,7 @@ const actions = {
   rewardWear: (id) => { const c = byId(COSMETICS, id); commit((s) => G.equip(s, c, c.slot)); sfx('tap'); },
   rewardGo: (arg) => {
     clearTimeout(ui.revealTimer); ui.reward = null;
+    if (S.pomo) { S.pomo = null; G.save(S); }
     if (arg === 'restore') ui.tab = 'world';
     if (arg === 'path') ui.tab = 'ember';
     render();
@@ -882,6 +1022,7 @@ const actions = {
   toggleSetting: (key) => commit((s) => { s.settings[key] = !s.settings[key]; }),
   stepSetting: (arg) => {
     const [key, d] = arg.split(':'), lim = key === 'dailyGoalMinutes' ? [15, 480] : [5, 180];
+    if (key.startsWith('pomo')) { commit((s) => { s.settings[key] = clampPomo(key, s.settings[key] + +d); }); return; }
     commit((s) => { s.settings[key] = Math.min(lim[1], Math.max(lim[0], s.settings[key] + +d)); });
   },
   exportData: async () => {
@@ -981,6 +1122,7 @@ function drawCanvas(c, t, still) {
     let scene = snap;
     let ex = 322, mood = ui.mood, boost = 0, phase = skyPhase();
     if (live === 'world') { ex = ui.worldX; mood = ui.worldMood; }
+    if (live === 'break') { mood = S.activeBreak?.done ? 'happy' : 'sleepy'; scene = { ...snap, hearthLit: true }; boost = 0.15; }
     if (live === 'focus' && S.activeSession) {
       const a = S.activeSession, e = G.elapsed(a);
       phase = 'night'; mood = a.pausedAt ? 'sleepy' : 'focused';
