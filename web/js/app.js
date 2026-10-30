@@ -151,6 +151,7 @@ function renderHome() {
       <div class="spacer"><div class="label">Add Ember Grove to your Home Screen</div><div class="small soft">In Safari, tap <b>Share</b>, then <b>Add to Home Screen</b>. It then opens full-screen like an app. Your progress is saved separately in Safari and in the Home Screen app, so pick one and stick with it.</div></div>
       <button data-act="hideInstallTip" aria-label="Dismiss" class="soft">${icon('close', 18)}</button></div>` : ''}
     ${choiceCards()}
+    ${rankCard()}
     <div class="card row" style="gap:18px">
       <div class="ring" role="img" aria-label="Focused ${today} of ${goal} minutes today">
         <svg width="86" height="86"><circle cx="43" cy="43" r="38" fill="none" stroke="var(--line)" stroke-width="10"/>
@@ -172,6 +173,16 @@ function renderHome() {
     <button class="btn" data-act="openSheet" data-arg="setup">${icon('flame', 22)} ${S.activeSession || S.activeBreak ? 'Return to focus' : 'Begin focusing'}</button>
     <div class="center tiny soft" style="margin-top:6px">${set.defaultMode === 'countdown' ? `${set.defaultMinutes} min` : set.defaultMode === 'pomodoro' ? `Pomodoro ${set.pomoFocus}/${set.pomoShort}` : 'Stopwatch'} · ${CATEGORIES[set.defaultCategory].title}</div>
   </div>`;
+}
+
+function rankCard() {
+  if (!LB.enabled()) return '';
+  if (!S.profile) return `<button class="choice" data-act="openJoin" style="border-color:color-mix(in srgb,var(--lavender) 70%,transparent)"><span class="orb" style="background:var(--lavender)">${icon('star', 24)}</span>
+    <span class="spacer"><div class="label">Join the leaderboard</div><div class="small soft">Pick a name and see how your focus compares with friends</div></span><span class="soft">${icon('chevron', 18)}</span></button>`;
+  const rows = ui.weekRows || [], i = rows.findIndex((r) => r.id === S.profile.userId);
+  const sub = i >= 0 ? `You're <b>#${i + 1}</b> of ${rows.length} this week` : 'Finish a session this week to get on the board';
+  return `<button class="choice" data-act="tab" data-arg="stats" style="border-color:color-mix(in srgb,var(--lavender) 70%,transparent)"><span class="orb" style="background:var(--lavender)">${icon('chart', 24)}</span>
+    <span class="spacer"><div class="label">Leaderboard</div><div class="small soft">${sub}</div></span><span class="soft">${icon('chevron', 18)}</span></button>`;
 }
 
 function choiceCards() {
@@ -401,6 +412,21 @@ function renderStats() {
 }
 
 // ---------------------------------------------------------------- Leaderboard
+function keepTyped(id, fn) {
+  const v = document.getElementById(id)?.value;
+  fn();
+  const el = document.getElementById(id);
+  if (el && v !== undefined) el.value = v;
+}
+
+/** Invite players who haven't joined yet, at most once every two days. */
+function maybeAskJoin(force = false) {
+  if (!LB.enabled() || S.profile || !S.settings.hasOnboarded) return;
+  if (ui.sheet || ui.dialog || ui.reward || S.activeSession || S.activeBreak) return;
+  if (!force && Date.now() - (S.settings.joinAskedAt || 0) < 2 * 864e5) return;
+  ui.board.joinError = null;
+  openSheet('join');
+}
 const COSMETIC_IDS = new Set(COSMETICS.map((c) => c.id));
 function safeLook(a) {
   a = a && typeof a === 'object' ? a : {};
@@ -428,10 +454,15 @@ async function loadBoard() {
   const b = ui.board;
   b.loading = true; b.error = null;
   if (ui.tab === 'stats') render();
-  try { b.rows = await LB.fetchBoard(S.profile || {}, b.scope, G.weekKey(Date.now())); G.save(S); }
+  const onTab = ui.tab;
+  try {
+    b.rows = await LB.fetchBoard(S.profile || {}, b.scope, G.weekKey(Date.now()));
+    if (b.scope === 'week') ui.weekRows = b.rows;
+    G.save(S);
+  }
   catch (e) { b.error = `Couldn't load the leaderboard: ${e.message}`; }
   b.loading = false;
-  if (ui.tab === 'stats') render();
+  if (ui.tab === 'stats' || (onTab === 'home' && ui.tab === 'home' && !ui.sheet)) render();
 }
 
 function renderBoard() {
@@ -443,7 +474,7 @@ function renderBoard() {
       <p class="small soft">Pick the name your friends will see. No email or password needed.</p>
       <input type="text" id="lbName" maxlength="20" placeholder="Your name" autocomplete="nickname" aria-label="Your leaderboard name">
       ${b.joinError ? `<div class="small" style="color:var(--coral)">${esc(b.joinError)}</div>` : ''}
-      <button class="btn" data-act="lbJoin" ${b.joining ? 'disabled' : ''}>${b.joining ? 'Joining…' : `${icon('star', 20)} Join`}</button></div>`;
+      <button class="btn" data-act="lbJoin" data-arg="lbName" ${b.joining ? 'disabled' : ''}>${b.joining ? 'Joining…' : `${icon('star', 20)} Join`}</button></div>`;
   const rows = b.rows || [];
   const medal = ['#F2C14E', '#C9CDE0', '#D9925A'];
   const list = b.loading && !b.rows ? '<p class="small soft center">Loading…</p>'
@@ -482,6 +513,7 @@ function renderSheet() {
   if (s.type === 'decor') return sheetDecor();
   if (s.type === 'settings') return sheetSettings();
   if (s.type === 'chapter') return sheetChapter(byId(CHAPTERS, s.arg));
+  if (s.type === 'join') return sheetJoin();
   return '';
 }
 
@@ -516,6 +548,22 @@ function pomoSetup(u) {
     <div class="row small soft" style="gap:6px;flex-wrap:wrap">${Array.from({ length: u.pomoEvery }, (_, i) => `<span class="pill" style="padding:4px 8px">${icon('flame', 12)} ${u.pomoFocus}m</span>${i < u.pomoEvery - 1 ? `<span>${u.pomoShort}m rest</span>` : ''}`).join('')}<span>then ${u.pomoLong}m long rest</span></div>
     <div class="row"><span class="spacer small">Start the next round or break automatically</span><button class="toggle ${u.pomoAuto ? 'on' : ''}" data-act="setup" data-arg="pauto" aria-pressed="${u.pomoAuto}" aria-label="Auto-start"></button></div>
     <p class="small soft">Work in focused rounds with short rests between them. Every round grows ${nm()}, and you can stop after any round.</p></div>`;
+}
+
+function sheetJoin() {
+  const b = ui.board, top = (ui.weekRows || []).slice(0, 3), medal = ['#F2C14E', '#C9CDE0', '#D9925A'];
+  const body = `<div class="stack center" style="gap:14px;align-items:center">
+    ${emberCv(G.appearance(S), 'happy', 120)}
+    <div class="h2" style="font-size:24px">Join the leaderboard</div>
+    <p class="small soft" style="max-width:320px">Focus alongside friends and see who kept their fire burning longest this week. Just pick a name: no email or password.</p>
+    ${top.length ? `<div class="stack" style="gap:6px;width:100%">${top.map((r, i) => `<div class="list-row" style="padding:8px 12px;gap:10px">
+      <span style="width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:none;font-weight:800;font-size:13px;background:${medal[i]};color:var(--ink-fixed)">${i + 1}</span>
+      ${emberCv(safeLook(r.appearance), 'idle', 34, false)}<span class="spacer label" style="text-align:left">${esc(r.name)}</span><b class="small">${fmtMin(r.week_minutes | 0)}</b></div>`).join('')}</div>` : ''}
+    <input type="text" id="joinName" maxlength="20" placeholder="Your name" autocomplete="nickname" aria-label="Your leaderboard name" style="text-align:center">
+    ${b.joinError ? `<div class="small" style="color:var(--coral)">${esc(b.joinError)}</div>` : ''}
+    <p class="tiny soft">Only your name, ${nm()}'s look and level, and your focus minutes are shared.</p></div>`;
+  return sheetFrame('', body, `<div class="stack" style="gap:8px"><button class="btn" data-act="lbJoin" data-arg="joinName" ${b.joining ? 'disabled' : ''}>${b.joining ? 'Joining…' : `${icon('star', 20)} Join`}</button>
+    <button class="btn secondary" data-act="joinLater">Not now</button></div>`);
 }
 
 function sheetRestore() {
@@ -980,24 +1028,35 @@ const actions = {
   statsView: (v) => { ui.statsView = v; render(); if (v === 'board') loadBoard(); },
   lbScope: (v) => { ui.board.scope = v; ui.board.rows = null; loadBoard(); },
   lbRefresh: () => loadBoard(),
-  lbJoin: async () => {
-    const name = (document.getElementById('lbName')?.value || '').trim(), problem = LB.nameProblem(name);
+  lbJoin: async (inputId) => {
+    const field = inputId || 'lbName', fromSheet = field === 'joinName';
+    const name = (document.getElementById(field)?.value || '').trim(), problem = LB.nameProblem(name);
+    const rerender = () => { if (fromSheet) { keepTyped(field, renderLayer); } else render(); };
     const b = ui.board;
-    if (problem) { b.joinError = problem; render(); return; }
-    b.joinError = null; b.joining = true; render();
+    if (problem) { b.joinError = problem; rerender(); return; }
+    b.joinError = null; b.joining = true; rerender();
     try {
       S.profile = { name };
       await LB.publish(S.profile, boardRow());
       G.save(S); sfx('discover');
+      b.joining = false;
+      if (fromSheet) ui.sheet = null;
+      ui.board.scope = 'week';
       await loadBoard();
+      render();
+      ui.banner = { icon: 'star', title: "You're on the leaderboard!", sub: `Find yourself in Ranks as ${S.profile.name}${S.profile.tag ? ` #${S.profile.tag}` : ''}.` };
+      renderLayer(); clearTimeout(showBanner.t); showBanner.t = setTimeout(() => { ui.banner = null; renderLayer(); }, 4200);
+      return;
     } catch (e) {
       S.profile = null; G.save(S);
       b.joinError = /anonymous/i.test(e.message) ? `The leaderboard needs anonymous sign-ins turned on in Supabase. (${e.message})`
         : /failed to fetch|load failed|network/i.test(e.message) ? `Couldn't reach the leaderboard. Check your connection and try again. (${e.message})`
         : `Couldn't join: ${e.message}`;
     }
-    b.joining = false; render();
+    b.joining = false; rerender();
   },
+  joinLater: () => { ui.sheet = null; ui.board.joinError = null; commit((s) => { s.settings.joinAskedAt = Date.now(); }); },
+  openJoin: () => { ui.board.joinError = null; openSheet('join'); },
   lbRename: () => { ui.dialog = { title: 'Change your leaderboard name', input: S.profile.name, inputMax: 20, buttons: [{ label: 'Save', act: 'lbSaveName' }, { label: 'Cancel', act: 'closeDialog', secondary: true }] }; renderLayer(); },
   lbSaveName: async () => {
     const v = (document.getElementById('dlgInput')?.value || '').trim(), problem = LB.nameProblem(v);
@@ -1074,6 +1133,7 @@ const actions = {
     if (arg === 'path') ui.tab = 'ember';
     render();
     if (arg) setTimeout(() => openSheet(arg), 250);
+    else setTimeout(() => maybeAskJoin(), 600);
   },
   pickLandmark: (id) => { ui.restorePick = id; ui.restoreVariant = byId(LANDMARKS, id).variants[0].id; renderLayer(); },
   pickVariant: (id) => { ui.restoreVariant = id; renderLayer(); },
@@ -1163,6 +1223,7 @@ const actions = {
     const v = (document.getElementById('nameInput')?.value || '').trim().slice(0, 16);
     commit((s) => { if (v) s.emberName = v; s.settings.hasOnboarded = true; G.refreshMilestones(s); });
     sfx('start');
+    setTimeout(() => maybeAskJoin(true), 900);
   },
 };
 
@@ -1183,7 +1244,8 @@ document.addEventListener('change', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.id === 'dlgInput') (ui.dialog?.buttons?.[0]?.act === 'lbSaveName' ? actions.lbSaveName() : actions.saveName());
-  if (e.key === 'Enter' && e.target.id === 'lbName') actions.lbJoin();
+  if (e.key === 'Enter' && e.target.id === 'lbName') actions.lbJoin('lbName');
+  if (e.key === 'Enter' && e.target.id === 'joinName') actions.lbJoin('joinName');
   if (e.key === 'Enter' && e.target.id === 'nameInput') actions.onboard();
 });
 
@@ -1268,5 +1330,7 @@ render();
 if (S.activeSession && !S.activeSession.pausedAt) keepAwake(true);
 requestAnimationFrame(frame);
 publishNow();
+loadBoard();
+setTimeout(() => maybeAskJoin(), 1200);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 window.__ember = { get state() { return S; }, actions, G, ui, render, loadBoard };
