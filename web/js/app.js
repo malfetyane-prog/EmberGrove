@@ -7,6 +7,7 @@ import { drawEmber } from './ember.js';
 import { drawGrove, drawCompanion, skyPhase, groundY, WORLD_W, WORLD_H, COMPANION_FRAMES } from './grove.js';
 import * as Sound from './audio.js';
 import { icon } from './icons.js';
+import * as LB from './leaderboard.js';
 
 // ---------------------------------------------------------------- state
 let S = G.load();
@@ -16,7 +17,7 @@ G.save(S);
 const ui = {
   tab: 'home', sheet: null, dialog: null, banner: null, reward: null, revealed: 0, revealTimer: null, glowStart: 0,
   mood: 'idle', speech: null, worldX: 322, worldTarget: 322, worldMood: 'idle', journey: 'quests', slot: 'head',
-  onboardStep: 0, setup: null, restorePick: null, restoreVariant: null, pathPick: 'hearth', chapterPage: 0, scroll: {},
+  onboardStep: 0, setup: null, statsView: 'board', board: { scope: 'week', rows: null, loading: false, error: null, joinError: null }, restorePick: null, restoreVariant: null, pathPick: 'hearth', chapterPage: 0, scroll: {},
 };
 let snap = null;
 const $app = document.getElementById('app'), $layer = document.getElementById('layer');
@@ -73,10 +74,13 @@ function render() {
   const sb = $layer.querySelector('.sheet-body');
   if (sb) ui.scroll.sheet = sb.scrollTop;
 
+  const typed = document.getElementById('lbName')?.value;
   const screens = { home: renderHome, world: renderWorld, ember: renderEmber, journey: renderJourney, stats: renderStats };
   $app.innerHTML = `<div style="position:relative;flex:1;display:flex;min-height:0">${screens[ui.tab]()}</div>${renderTabbar()}`;
   const ns = $app.querySelector('.screen');
   if (ns) ns.scrollTop = ui.scroll[ui.tab] || 0;
+  const nameField = document.getElementById('lbName');
+  if (nameField && typed !== undefined) nameField.value = typed;
   const nm2 = $app.querySelector('.map');
   if (nm2) nm2.scrollLeft = ui.scroll.map || 0;
   renderLayer();
@@ -109,7 +113,7 @@ function drawNow() {
 function renderTabbar() {
   const tabs = [
     ['home', 'flame', 'Hearth', 0], ['world', 'tree', 'Grove', G.canChoosePath(S) ? 0 : Math.min(G.renewalsAvailable(S), G.availableLandmarks(S).length)],
-    ['ember', 'sparkles', S.emberName, G.canChoosePath(S) ? '!' : 0], ['journey', 'book', 'Journey', G.claimableQuests(S)], ['stats', 'chart', 'Stats', 0],
+    ['ember', 'sparkles', S.emberName, G.canChoosePath(S) ? '!' : 0], ['journey', 'book', 'Journey', G.claimableQuests(S)], ['stats', 'chart', 'Ranks', 0],
   ];
   return `<nav class="tabbar">${tabs.map(([id, ic, label, badge]) => `<button class="${ui.tab === id ? 'on' : ''}" data-act="tab" data-arg="${id}" aria-label="${esc(label)}">
     ${icon(ic, 24)}<span>${esc(label)}</span>${badge ? `<span class="dot">${badge}</span>` : ''}</button>`).join('')}</nav>`;
@@ -373,8 +377,10 @@ function renderStats() {
   const best = Math.floor(Math.max(0, ...Object.values(byDay)));
   const tile = (title, value, ic) => `<div class="card" style="padding:14px"><span style="color:var(--amber)">${icon(ic, 18)}</span><div style="font-size:26px;font-weight:800">${value}</div><div class="small soft">${title}</div></div>`;
   const rec = (t, v, ic) => `<div class="row"><span style="color:var(--amber)">${icon(ic, 18)}</span><span class="spacer small">${t}</span><b class="small">${v}</b></div>`;
+  const seg = `<div class="title">Ranks</div><div class="seg"><button class="${ui.statsView === 'board' ? 'on' : ''}" data-act="statsView" data-arg="board">Leaderboard</button><button class="${ui.statsView === 'mine' ? 'on' : ''}" data-act="statsView" data-arg="mine">My stats</button></div>`;
+  if (ui.statsView === 'board') return `<div class="screen" data-tab="stats"><div class="stack">${seg}${renderBoard()}</div></div>`;
   return `<div class="screen" data-tab="stats"><div class="stack">
-    <div class="title">Statistics</div>
+    ${seg}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${tile('Today', fmtMin(G.todayMinutes(S)), 'sun')}${tile('This week', fmtMin(week), 'calendar')}
       ${tile('Lifetime', `${(G.totalMinutes(S) / 60).toFixed(1)}h`, 'flame')}${tile('Sessions', c.length, 'check')}</div>
     <div class="card stack" style="gap:8px"><div class="h2">Last 7 days</div>
@@ -392,6 +398,72 @@ function renderStats() {
         <div class="spacer"><div class="label">${CATEGORIES[r.category].title}</div><div class="tiny soft">${new Date(r.start).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div></div>
         ${r.reachedTarget ? `<span style="color:var(--moss)">${icon('check', 16)}</span>` : ''}<b class="small">${fmtMin(Math.floor(r.seconds / 60))}</b></div>`).join('') : '<div class="small soft">Your sessions will appear here.</div>'}</div>
   </div></div>`;
+}
+
+// ---------------------------------------------------------------- Leaderboard
+const COSMETIC_IDS = new Set(COSMETICS.map((c) => c.id));
+function safeLook(a) {
+  a = a && typeof a === 'object' ? a : {};
+  const pick = (v) => (typeof v === 'string' && COSMETIC_IDS.has(v) ? v : null);
+  return { stage: Math.max(0, Math.min(4, a.stage | 0)), path: PATHS[a.path] ? a.path : null, head: pick(a.head), neck: pick(a.neck), face: pick(a.face), flameTint: FLAMES[a.flameTint] ? a.flameTint : 'amber' };
+}
+
+function boardRow() {
+  const now = Date.now();
+  const week = Math.floor(G.sessionsInWeek(S, now).reduce((a, r) => a + r.seconds, 0) / 60);
+  return { name: S.profile.name, level: G.level(S), stage: G.stage(S).name, appearance: G.appearance(S),
+    week_key: G.weekKey(now), week_minutes: Math.min(6000, week), total_minutes: Math.min(1000000, G.totalMinutes(S)) };
+}
+
+let lastPublish = 0;
+async function publishNow(force = false) {
+  if (!LB.enabled() || !S.profile) return;
+  if (!force && Date.now() - lastPublish < 60e3) return;
+  lastPublish = Date.now();
+  try { await LB.publish(S.profile, boardRow()); G.save(S); } catch (e) { console.warn('Leaderboard update failed', e); }
+}
+
+async function loadBoard() {
+  if (!LB.enabled()) return;
+  const b = ui.board;
+  b.loading = true; b.error = null;
+  if (ui.tab === 'stats') render();
+  try { b.rows = await LB.fetchBoard(S.profile || {}, b.scope, G.weekKey(Date.now())); G.save(S); }
+  catch (e) { b.error = "Couldn't load the leaderboard. Check your connection and try again."; }
+  b.loading = false;
+  if (ui.tab === 'stats') render();
+}
+
+function renderBoard() {
+  if (!LB.enabled()) return `<div class="card stack" style="gap:8px"><div class="h2">Leaderboard coming soon</div><p class="small soft">It's being set up and will appear here after an update.</p></div>`;
+  const b = ui.board, me = S.profile;
+  const join = me ? `<div class="card row" style="gap:12px">${emberCv(G.appearance(S), 'happy', 48)}<div class="spacer"><div class="small soft">You're on the board as</div>
+      <div class="label">${esc(me.name)}${me.tag ? ` <span class="soft">#${me.tag}</span>` : ''}</div></div><button class="small" style="color:var(--amber);font-weight:700" data-act="lbRename">Change</button></div>`
+    : `<div class="card stack" style="gap:10px"><div class="h2">Join the leaderboard</div>
+      <p class="small soft">Pick the name your friends will see. No email or password needed.</p>
+      <input type="text" id="lbName" maxlength="20" placeholder="Your name" autocomplete="nickname" aria-label="Your leaderboard name">
+      ${b.joinError ? `<div class="small" style="color:var(--coral)">${esc(b.joinError)}</div>` : ''}
+      <button class="btn" data-act="lbJoin" ${b.joining ? 'disabled' : ''}>${b.joining ? 'Joining…' : `${icon('star', 20)} Join`}</button></div>`;
+  const rows = b.rows || [];
+  const medal = ['#F2C14E', '#C9CDE0', '#D9925A'];
+  const list = b.loading && !b.rows ? '<p class="small soft center">Loading…</p>'
+    : b.error ? `<p class="small center" style="color:var(--coral)">${esc(b.error)}</p>`
+    : !rows.length ? `<p class="small soft center">No one on the board ${b.scope === 'week' ? 'this week ' : ''}yet. Finish a session to be first!</p>`
+    : rows.map((r, i) => {
+      const mine = me && r.id === me.userId, mins = b.scope === 'week' ? r.week_minutes : r.total_minutes;
+      return `<div class="list-row" style="${mine ? 'border:1.5px solid var(--amber);' : ''}gap:10px;padding:10px 12px">
+        <span style="width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex:none;font-weight:800;font-size:14px;${i < 3 ? `background:${medal[i]};color:var(--ink-fixed)` : 'color:var(--ink-soft)'}">${i + 1}</span>
+        ${emberCv(safeLook(r.appearance), 'idle', 42, false)}
+        <span class="spacer" style="min-width:0"><div class="label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.name)} <span class="soft small">#${esc(r.tag)}</span>${mine ? ' <span class="small" style="color:var(--amber)">(you)</span>' : ''}</div>
+        <div class="tiny soft">Lv ${esc(r.level)} · ${esc(r.stage || 'Spark')}</div></span>
+        <b style="font-variant-numeric:tabular-nums">${fmtMin(mins | 0)}</b></div>`;
+    }).join('');
+  return `${join}
+    <div class="row"><div class="seg spacer"><button class="${b.scope === 'week' ? 'on' : ''}" data-act="lbScope" data-arg="week">This week</button><button class="${b.scope === 'all' ? 'on' : ''}" data-act="lbScope" data-arg="all">All time</button></div>
+      <button data-act="lbRefresh" aria-label="Refresh" style="width:40px;height:36px;display:grid;place-items:center;color:var(--ink-soft)">${icon('clock', 20)}</button></div>
+    <div class="stack" style="gap:8px">${list}</div>
+    <p class="tiny soft center">Ranked by focus minutes. The weekly board starts fresh every Monday.<br>Only your name, ${nm()}'s look and level, and your focus minutes are shared.</p>
+    ${me ? '<button class="small soft center" data-act="lbLeave" style="padding:8px">Leave the leaderboard</button>' : ''}`;
 }
 
 // ---------------------------------------------------------------- Sheets
@@ -549,7 +621,7 @@ function sheetChapter(c) {
 function renderDialog() {
   const d = ui.dialog;
   return `<div class="dialog-bd" data-act="${d.cancel || 'closeDialog'}"></div><div class="dialog" role="alertdialog"><div class="stack" style="gap:10px">
-    <div class="h2">${esc(d.title)}</div>${d.body ? `<p class="small soft">${esc(d.body)}</p>` : ''}${d.input ? `<input type="text" id="dlgInput" value="${esc(d.input)}" maxlength="16" autocomplete="off">` : ''}
+    <div class="h2">${esc(d.title)}</div>${d.body ? `<p class="small soft">${esc(d.body)}</p>` : ''}${d.input ? `<input type="text" id="dlgInput" value="${esc(d.input)}" maxlength="${d.inputMax || 16}" autocomplete="off">` : ''}
     <div class="stack" style="gap:8px;margin-top:6px">${d.buttons.map((b) => `<button class="btn ${b.secondary ? 'secondary' : ''}" style="${b.danger ? 'color:var(--coral)' : ''}" data-act="${b.act}" data-arg="${b.arg || ''}">${esc(b.label)}</button>`).join('')}</div></div></div>`;
 }
 
@@ -780,6 +852,7 @@ function finishSession(at = Date.now()) {
   renderLayer();
   sfx('complete');
   scheduleReveal(800);
+  publishNow(true);
 }
 
 function checkCompletion() {
@@ -903,7 +976,39 @@ function openSheet(type, arg) {
 
 let pokeTimer;
 const actions = {
-  tab: (id) => { ui.tab = id; ui.speech = null; render(); },
+  tab: (id) => { ui.tab = id; ui.speech = null; render(); if (id === 'stats' && ui.statsView === 'board') loadBoard(); },
+  statsView: (v) => { ui.statsView = v; render(); if (v === 'board') loadBoard(); },
+  lbScope: (v) => { ui.board.scope = v; ui.board.rows = null; loadBoard(); },
+  lbRefresh: () => loadBoard(),
+  lbJoin: async () => {
+    const name = (document.getElementById('lbName')?.value || '').trim(), problem = LB.nameProblem(name);
+    const b = ui.board;
+    if (problem) { b.joinError = problem; render(); return; }
+    b.joinError = null; b.joining = true; render();
+    try {
+      S.profile = { name };
+      await LB.publish(S.profile, boardRow());
+      G.save(S); sfx('discover');
+      await loadBoard();
+    } catch (e) {
+      S.profile = null; G.save(S);
+      b.joinError = /anonymous/i.test(e.message) ? 'The leaderboard needs anonymous sign-ins turned on in Supabase.' : "Couldn't join right now. Check your connection and try again.";
+    }
+    b.joining = false; render();
+  },
+  lbRename: () => { ui.dialog = { title: 'Change your leaderboard name', input: S.profile.name, inputMax: 20, buttons: [{ label: 'Save', act: 'lbSaveName' }, { label: 'Cancel', act: 'closeDialog', secondary: true }] }; renderLayer(); },
+  lbSaveName: async () => {
+    const v = (document.getElementById('dlgInput')?.value || '').trim(), problem = LB.nameProblem(v);
+    if (problem) { ui.dialog.body = problem; renderLayer(); return; }
+    ui.dialog = null; S.profile.name = v; G.save(S); render();
+    await publishNow(true); loadBoard();
+  },
+  lbLeave: () => { ui.dialog = { title: 'Leave the leaderboard?', body: 'Your entry will be removed. You can join again any time.', buttons: [{ label: 'Leave', act: 'lbLeaveNow', secondary: true, danger: true }, { label: 'Stay', act: 'closeDialog' }] }; renderLayer(); },
+  lbLeaveNow: async () => {
+    ui.dialog = null;
+    try { await LB.leave(S.profile); } catch (e) { /* removed locally either way */ }
+    S.profile = null; G.save(S); render(); loadBoard();
+  },
   openSheet: (arg) => openSheet(arg),
   closeSheet: () => { ui.sheet = null; renderLayer(); },
   closeDialog: () => { ui.dialog = null; renderLayer(); },
@@ -1075,7 +1180,8 @@ document.addEventListener('change', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.id === 'dlgInput') actions.saveName();
+  if (e.key === 'Enter' && e.target.id === 'dlgInput') (ui.dialog?.buttons?.[0]?.act === 'lbSaveName' ? actions.lbSaveName() : actions.saveName());
+  if (e.key === 'Enter' && e.target.id === 'lbName') actions.lbJoin();
   if (e.key === 'Enter' && e.target.id === 'nameInput') actions.onboard();
 });
 
@@ -1084,6 +1190,7 @@ document.addEventListener('visibilitychange', () => {
     checkCompletion();
     if (S.activeSession && !S.activeSession.pausedAt) keepAwake(true);
     render();
+    publishNow();
   }
 });
 setInterval(checkCompletion, 1000);
@@ -1158,5 +1265,6 @@ checkCompletion();
 render();
 if (S.activeSession && !S.activeSession.pausedAt) keepAwake(true);
 requestAnimationFrame(frame);
+publishNow();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
-window.__ember = { get state() { return S; }, actions, G, ui, render };
+window.__ember = { get state() { return S; }, actions, G, ui, render, loadBoard };
