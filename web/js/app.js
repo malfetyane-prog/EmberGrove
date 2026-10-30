@@ -537,7 +537,8 @@ function sheetSetup() {
         <button class="toggle ${u.deep ? 'on' : ''}" data-act="setup" data-arg="deep" aria-pressed="${!!u.deep}" aria-label="Deep Focus"></button></div>
       <p class="small soft">Put your phone face down. If you leave the app, the timer waits for you, and staying the whole time earns bonus Glow.</p>
     </div>
-    <div class="stack" style="gap:10px"><div class="caps">Ambience</div><div class="chips">${Object.entries(AMBIENCE).map(([k, a]) => `<button class="chip ${u.ambient === k ? 'on' : ''}" data-act="setup" data-arg="amb:${k}">${icon(a.icon, 16)}${a.title}</button>`).join('')}</div></div>
+    <div class="stack" style="gap:10px"><div class="caps">Ambience</div><div class="chips">${Object.entries(AMBIENCE).map(([k, a]) => `<button class="chip ${u.ambient === k ? 'on' : ''}" data-act="setup" data-arg="amb:${k}">${icon(a.icon, 16)}${a.title}</button>`).join('')}</div>
+      ${AMBIENCE[u.ambient]?.hint ? `<p class="small soft">${AMBIENCE[u.ambient].hint}</p>` : ''}</div>
   </div>`;
   const label = u.mode === 'countdown' ? `Focus for ${u.minutes} minutes` : u.mode === 'pomodoro' ? `Start round 1 of ${u.pomoEvery}` : 'Start stopwatch';
   return sheetFrame('Focus', body, `<button class="btn" data-act="startFocus">${icon('flame', 20)} ${label}</button>`);

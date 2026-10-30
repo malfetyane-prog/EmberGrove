@@ -13,6 +13,8 @@ export const AMBIENCE = {
   campfire: { title: 'Campfire', icon: 'flame' },
   rain: { title: 'Soft Rain', icon: 'rain' },
   breeze: { title: 'Forest Breeze', icon: 'wind' },
+  lofi: { title: 'Lo-fi Beats', icon: 'note' },
+  binaural: { title: 'Focus Waves', icon: 'headphones', hint: 'Binaural 14 Hz beta waves. Use headphones: each ear hears a slightly different tone.' },
 };
 
 export const PATHS = {
