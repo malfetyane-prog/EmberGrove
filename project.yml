@@ -1,0 +1,82 @@
+name: EmberGrove
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""   # set your team ID here (or in Xcode → Signing & Capabilities)
+targets:
+  EmberGrove:
+    type: application
+    platform: iOS
+    sources:
+      - EmberGrove
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.embergrove
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_ENTITLEMENTS: EmberGrove/EmberGrove.entitlements
+    info:
+      path: EmberGrove/Info.plist
+      properties:
+        CFBundleDisplayName: Ember Grove
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIBackgroundModes: [audio]
+        NSSupportsLiveActivities: true
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: EmberGrove/EmberGrove.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.example.embergrove]
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
+    dependencies:
+      - target: EmberGroveWidgets
+        embed: true
+  EmberGroveWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - EmberGroveWidgets
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.embergrove.widgets
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_ENTITLEMENTS: EmberGroveWidgets/EmberGroveWidgets.entitlements
+    info:
+      path: EmberGroveWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Ember Grove
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: EmberGroveWidgets/EmberGroveWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.example.embergrove]
+  EmberGroveTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [EmberGroveTests]
+    dependencies:
+      - target: EmberGrove
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  EmberGrove:
+    build:
+      targets:
+        EmberGrove: all
+        EmberGroveTests: [test]
+    test:
+      targets: [EmberGroveTests]
