@@ -15,6 +15,7 @@ export function defaultSettings() {
     ambient: 'campfire', ambientVolume: 0.6, soundEffects: true, keepScreenAwake: true,
     reduceMotion: false, appearance: 'system', hasOnboarded: false,
     pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoEvery: 4, pomoAuto: false,
+    deepFocus: false, focusShortcut: false,
   };
 }
 
@@ -234,6 +235,7 @@ export function applySession(s, record, now = Date.now(), rnd = Math.random) {
   if (record.mode === 'countdown' && record.reachedTarget) lines.push({ label: 'Finished your timer', amount: Math.floor(base / 5) });
   else if (record.mode === 'stopwatch' && minutes >= 25) lines.push({ label: 'Long, steady session', amount: Math.floor(base / 10) });
   if (previousEnd && now - previousEnd > 36 * 3600e3) lines.push({ label: 'Welcome back, rested glow', amount: Math.floor(base / 4) });
+  if (record.deep && !record.interruptions && minutes >= 10) lines.push({ label: 'Deep Focus, no distractions', amount: Math.floor(base / 10) });
   if (bonus.glowMult > 1) lines.push({ label: `${stage(s).name}'s radiance`, amount: Math.floor(base * (bonus.glowMult - 1)) });
   summary.glowLines = lines;
   summary.glowTotal = lines.reduce((a, l) => a + l.amount, 0);

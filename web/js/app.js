@@ -516,6 +516,7 @@ function renderSheet() {
   if (s.type === 'settings') return sheetSettings();
   if (s.type === 'chapter') return sheetChapter(byId(CHAPTERS, s.arg));
   if (s.type === 'join') return sheetJoin();
+  if (s.type === 'shortcut') return sheetShortcut();
   return '';
 }
 
@@ -531,6 +532,13 @@ function sheetSetup() {
       ${u.custom ? `<div class="card row"><span class="label spacer">${u.minutes} minutes</span><div class="stepper"><button data-act="setup" data-arg="step:-5" aria-label="Less">−</button><button data-act="setup" data-arg="step:5" aria-label="More">+</button></div></div>` : ''}</div>`
       : '<p class="small soft">The stopwatch counts up until you finish. Every minute counts.</p>'}
     <div class="stack" style="gap:10px"><div class="caps">Category</div><div class="chips">${Object.entries(CATEGORIES).map(([k, c]) => `<button class="chip ${u.category === k ? 'on' : ''}" style="--chip:${c.color}" data-act="setup" data-arg="cat:${k}">${icon(c.icon, 16)}${c.title}</button>`).join('')}</div></div>
+    <div class="card stack" style="gap:8px">
+      <div class="row"><span style="color:var(--amber)">${icon('moon', 20)}</span><span class="spacer label">Deep Focus</span>
+        <button class="toggle ${u.deep ? 'on' : ''}" data-act="setup" data-arg="deep" aria-pressed="${!!u.deep}" aria-label="Deep Focus"></button></div>
+      <p class="small soft">Put your phone face down. If you leave the app, the timer waits for you, and staying the whole time earns bonus Glow.</p>
+      ${S.settings.focusShortcut ? `<p class="small" style="color:var(--moss)">${icon('check', 14)} Do Not Disturb will turn on when you start.</p>`
+        : `<button class="small" style="color:var(--amber);font-weight:700;text-align:left" data-act="openSheet" data-arg="shortcut">Also silence notifications with Do Not Disturb →</button>`}
+    </div>
     <div class="stack" style="gap:10px"><div class="caps">Ambience</div><div class="chips">${Object.entries(AMBIENCE).map(([k, a]) => `<button class="chip ${u.ambient === k ? 'on' : ''}" data-act="setup" data-arg="amb:${k}">${icon(a.icon, 16)}${a.title}</button>`).join('')}</div></div>
   </div>`;
   const label = u.mode === 'countdown' ? `Focus for ${u.minutes} minutes` : u.mode === 'pomodoro' ? `Start round 1 of ${u.pomoEvery}` : 'Start stopwatch';
@@ -642,6 +650,10 @@ function sheetSettings() {
       ${step('pomoFocus', 'Focus round', `${s.pomoFocus} min`, 5)}${step('pomoShort', 'Short break', `${s.pomoShort} min`, 1)}
       ${step('pomoLong', 'Long break', `${s.pomoLong} min`, 5)}${step('pomoEvery', 'Rounds per cycle', s.pomoEvery, 1)}
       ${tog('pomoAuto', 'Start next round or break automatically')}</div>
+    <div class="caps">Focus helpers</div><div class="card" style="padding:0 16px">
+      ${tog('deepFocus', 'Deep Focus by default')}
+      <div class="form-row"><span class="spacer">Do Not Disturb shortcut<div class="tiny soft">${s.focusShortcut ? 'On: runs when a session starts' : 'Off'}</div></span>
+        <button class="label" style="color:var(--amber)" data-act="openSheet" data-arg="shortcut">Set up</button></div></div>
     <div class="caps">Sound</div><div class="card" style="padding:0 16px">
       ${sel('ambient', 'Ambience', Object.entries(AMBIENCE).map(([k, a]) => [k, a.title]))}
       <div class="form-row"><span>Volume</span><input type="range" min="0" max="1" step="0.05" value="${s.ambientVolume}" data-set="ambientVolume" aria-label="Ambience volume"></div>
@@ -691,6 +703,9 @@ function renderFocus() {
       <div id="timer" class="timer" role="timer">--:--</div>
       ${a.target ? `<div style="width:220px;margin:12px auto 0"><div class="bar thin"><i id="fbar" style="width:0%;transition:none"></i></div></div>` : ''}
       <p id="fline" class="center" style="color:var(--lavender);margin-top:12px;font-size:16px"></p>
+      ${a.deep ? `<div class="center" style="margin-top:12px"><span class="ghost-pill" style="font-size:13px">${icon('moon', 14)} ${ui.awayNotice
+        ? `You were away ${fmtMin(Math.max(1, Math.round(ui.awayNotice / 60)))}. The timer waited for you.`
+        : a.interruptions ? `Deep Focus · ${plural(a.interruptions, 'pause')} so far` : 'Deep Focus · phone face down'}</span></div>` : ''}
       ${a.pomo && S.pomo ? roundDots(S.pomo.cycle, S.settings.pomoEvery, true) : ''}
       <div class="spacer"></div>
       <div class="row" style="justify-content:center;gap:28px">
@@ -860,23 +875,81 @@ function startSession() {
   const u = ui.setup;
   Sound.unlock();
   commit((s) => {
-    s.settings.defaultMode = u.mode; s.settings.defaultCategory = u.category; s.settings.ambient = u.ambient;
+    s.settings.defaultMode = u.mode; s.settings.defaultCategory = u.category; s.settings.ambient = u.ambient; s.settings.deepFocus = !!u.deep;
     if (u.mode === 'countdown') s.settings.defaultMinutes = u.minutes;
     if (u.mode === 'pomodoro') {
       Object.assign(s.settings, { pomoFocus: u.pomoFocus, pomoShort: u.pomoShort, pomoLong: u.pomoLong, pomoEvery: u.pomoEvery, pomoAuto: u.pomoAuto });
       s.pomo = { cycle: 1, category: u.category };
       s.activeBreak = null;
-      s.activeSession = { mode: 'countdown', pomo: true, category: u.category, startDate: Date.now(), target: u.pomoFocus * 60, pausedTotal: 0, pausedAt: null };
+      s.activeSession = { mode: 'countdown', pomo: true, deep: !!u.deep, category: u.category, startDate: Date.now(), target: u.pomoFocus * 60, pausedTotal: 0, pausedAt: null };
       return;
     }
     s.pomo = null;
-    s.activeSession = { mode: u.mode, category: u.category, startDate: Date.now(), target: u.mode === 'countdown' ? u.minutes * 60 : null, pausedTotal: 0, pausedAt: null };
+    s.activeSession = { mode: u.mode, deep: !!u.deep, category: u.category, startDate: Date.now(), target: u.mode === 'countdown' ? u.minutes * 60 : null, pausedTotal: 0, pausedAt: null };
   });
-  ui.sheet = null; lastTimerText = '';
+  ui.sheet = null; lastTimerText = ''; ui.awayNotice = null;
   render();
   Sound.setAmbient(S.settings.ambient, S.settings.ambientVolume);
   sfx('start');
   keepAwake(true);
+  launchFocusShortcut();
+}
+
+// ---------------------------------------------------------------- Deep Focus & Do Not Disturb
+const SHORTCUT_NAME = 'Ember Focus';
+const GRACE_SECONDS = 10;
+
+/** Opens the user's "Ember Focus" shortcut, passing the session length in minutes. */
+function launchFocusShortcut(test = false) {
+  if (!S.settings.focusShortcut && !test) return;
+  const a = S.activeSession;
+  const minutes = test ? 1 : a?.target ? Math.ceil(G.remaining(a) / 60) : 180;
+  ui.shortcutUntil = Date.now() + 90e3; // returning from Shortcuts isn't "leaving"
+  location.href = `shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME)}&input=text&text=${minutes}`;
+}
+
+function onAppHidden() {
+  const a = S.activeSession;
+  if (!a || !a.deep || a.pausedAt || a.awayAt) return;
+  a.awayAt = Date.now();
+  G.save(S);
+}
+
+/** Deep Focus: time away (beyond a short grace) doesn't count, and the timer waits. */
+function onAppVisible() {
+  const a = S.activeSession;
+  if (!a || !a.awayAt) return;
+  const away = (Date.now() - a.awayAt) / 1000;
+  const viaShortcut = ui.shortcutUntil && a.awayAt <= ui.shortcutUntil && away < 90;
+  delete a.awayAt;
+  if (away > GRACE_SECONDS && !viaShortcut) {
+    a.pausedTotal += away;
+    a.awaySeconds = (a.awaySeconds || 0) + away;
+    a.interruptions = (a.interruptions || 0) + 1;
+    ui.awayNotice = away;
+    clearTimeout(onAppVisible.t);
+    onAppVisible.t = setTimeout(() => { ui.awayNotice = null; if (S.activeSession) renderLayer(); }, 9000);
+  }
+  lastTimerText = '';
+  G.save(S);
+}
+
+function sheetShortcut() {
+  const on = S.settings.focusShortcut;
+  const step = (n, html) => `<div class="row" style="align-items:flex-start;gap:12px"><span class="orb-sm" style="background:var(--amber-glow);color:var(--ink-fixed);font-weight:800;font-size:14px">${n}</span><div class="small" style="padding-top:5px">${html}</div></div>`;
+  const body = `<div class="stack" style="gap:14px">
+    <p class="small soft">Create a Shortcut once, and Ember Grove will turn on <b>Do Not Disturb</b> for exactly as long as your session whenever you start focusing.</p>
+    <div class="card stack" style="gap:12px">
+      ${step(1, 'Open the <b>Shortcuts</b> app, tap <b>+</b>, and name the shortcut exactly <b>Ember Focus</b> (tap the name at the top).')}
+      ${step(2, 'Tap <b>Add Action</b>, search for <b>Adjust Date</b> and add it. Set it to <b>Add</b>, tap the number and choose <b>Shortcut Input</b>, set the unit to <b>minutes</b>, and make the date <b>Current Date</b>.')}
+      ${step(3, 'Add the action <b>Set Focus</b>. Set it to turn <b>Do Not Disturb On</b>, tap <b>Turned Off</b> and choose <b>Time</b>, then pick <b>Adjusted Date</b>.')}
+      ${step(4, 'Tap <b>Done</b>. Then switch on the toggle below and tap <b>Test it</b>.')}
+    </div>
+    <p class="small soft">Tip: instead of Do Not Disturb you can choose your own Focus (iPhone Settings → Focus) that allows only the people and apps you want.</p>
+    <div class="card row"><span class="spacer label">Turn on Do Not Disturb when I start</span>
+      <button class="toggle ${on ? 'on' : ''}" data-act="toggleSetting" data-arg="focusShortcut" aria-pressed="${on}" aria-label="Use the Ember Focus shortcut"></button></div>
+    <p class="tiny soft">After the shortcut runs, tap <b>◀ Ember Grove</b> in the top-left corner if you're not brought back automatically. It doesn't count as leaving.</p></div>`;
+  return sheetFrame('Do Not Disturb', body, `<button class="btn ${on ? '' : 'secondary'}" data-act="testShortcut">${icon('moon', 20)} Test it (1 minute)</button>`);
 }
 
 function finishSession(at = Date.now()) {
@@ -884,6 +957,7 @@ function finishSession(at = Date.now()) {
   if (!a) return;
   const seconds = Math.floor(G.elapsed(a, at));
   const record = { start: a.startDate, end: at, seconds, category: a.category, mode: a.mode, reachedTarget: G.isComplete(a, at) };
+  if (a.deep) Object.assign(record, { deep: true, interruptions: a.interruptions || 0, awaySeconds: Math.round(a.awaySeconds || 0) });
   Sound.stopAmbient(); keepAwake(false); document.title = 'Ember Grove';
   ui.dialog = null;
   if (seconds < 60) { commit((s) => { s.activeSession = null; s.pomo = null; }); return; }
@@ -913,7 +987,7 @@ function checkCompletion() {
     if (S.settings.pomoAuto) startNextRound();
   }
   const a = S.activeSession;
-  if (!a || a.mode !== 'countdown' || a.pausedAt) return;
+  if (!a || a.mode !== 'countdown' || a.pausedAt || a.awayAt) return;
   const end = G.endDate(a);
   if (end && Date.now() >= end) finishSession(end);
 }
@@ -960,12 +1034,13 @@ function startNextRound() {
     const wasLong = s.activeBreak?.kind === 'long' || s.pomo.cycle % s.settings.pomoEvery === 0;
     s.pomo.cycle = wasLong ? 1 : s.pomo.cycle + 1;
     s.activeBreak = null;
-    s.activeSession = { mode: 'countdown', pomo: true, category: s.pomo.category, startDate: Date.now(), target: s.settings.pomoFocus * 60, pausedTotal: 0, pausedAt: null };
+    s.activeSession = { mode: 'countdown', pomo: true, deep: s.settings.deepFocus, category: s.pomo.category, startDate: Date.now(), target: s.settings.pomoFocus * 60, pausedTotal: 0, pausedAt: null };
   });
-  lastTimerText = '';
+  lastTimerText = ''; ui.awayNotice = null;
   Sound.setAmbient(S.settings.ambient, S.settings.ambientVolume);
   sfx('start');
   keepAwake(true);
+  launchFocusShortcut();
 }
 
 function renderBreak() {
@@ -1013,7 +1088,7 @@ function openSheet(type, arg) {
   if (type === 'setup') {
     const s = S.settings;
     ui.setup = { mode: s.defaultMode, minutes: s.defaultMinutes, category: s.defaultCategory, ambient: s.ambient, custom: ![15, 25, 45, 60].includes(s.defaultMinutes),
-      pomoFocus: s.pomoFocus, pomoShort: s.pomoShort, pomoLong: s.pomoLong, pomoEvery: s.pomoEvery, pomoAuto: s.pomoAuto, pomoCustom: false };
+      pomoFocus: s.pomoFocus, pomoShort: s.pomoShort, pomoLong: s.pomoLong, pomoEvery: s.pomoEvery, pomoAuto: s.pomoAuto, pomoCustom: false, deep: s.deepFocus };
   }
   if (type === 'restore') { ui.restorePick = null; ui.restoreVariant = null; }
   if (type === 'path') ui.pathPick = 'hearth';
@@ -1115,6 +1190,7 @@ const actions = {
     if (k === 'preset') { [u.pomoFocus, u.pomoShort, u.pomoLong] = v.split(',').map(Number); u.pomoCustom = false; }
     if (k === 'pcustom') u.pomoCustom = true;
     if (k === 'pauto') u.pomoAuto = !u.pomoAuto;
+    if (k === 'deep') u.deep = !u.deep;
     if (k === 'pstep') { const [key, d] = arg.split(':').slice(1); u[key] = clampPomo(key, u[key] + +d); u.pomoCustom = true; }
     if (k === 'min') { u.minutes = +v; u.custom = false; }
     if (k === 'custom') u.custom = true;
@@ -1124,6 +1200,7 @@ const actions = {
     renderLayer();
   },
   startFocus: () => startSession(),
+  testShortcut: () => { if (!S.settings.focusShortcut) commit((s) => { s.settings.focusShortcut = true; }); launchFocusShortcut(true); },
   startBreak: () => startBreak(),
   skipBreak: () => startNextRound(),
   nextRound: () => startNextRound(),
@@ -1276,7 +1353,9 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') onAppHidden();
   if (document.visibilityState === 'visible') {
+    onAppVisible();
     checkCompletion();
     if (S.activeSession && !S.activeSession.pausedAt) keepAwake(true);
     render();
@@ -1351,6 +1430,7 @@ function frame() {
 }
 
 // ---------------------------------------------------------------- Boot
+onAppVisible();
 checkCompletion();
 render();
 if (S.activeSession && !S.activeSession.pausedAt) keepAwake(true);
