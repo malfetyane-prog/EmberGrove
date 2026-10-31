@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
 :root {
-  --bg: #FBF3E4; --bg-deep: #F3E4C8; --card: #FFFAF0; --raised: #FFFFFF; --ink: #2E2238; --ink-soft: #6E6178;
+  --bg: #FBF3E4; --bg-deep: #F3E4C8; --card: #FFFAF0; --raised: #FFFFFF; --seg-on: #FFFFFF; --ink: #2E2238; --ink-soft: #6E6178;
   --line: #E8D9BC; --moss: #4F8A3A; --seeds: #8A6A2E;
   --amber: #F5A524; --amber-glow: #FFD27A; --coral: #E8674A; --lavender: #B9A6E0; --cream: #FFF4E0;
   --dusk-deep: #1E1630; --dusk: #2C2145; --ink-fixed: #2E2238;
@@ -27,12 +27,12 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #171126; --bg-deep: #0F0B1A; --card: #251C3B; --raised: #30264A; --ink: #F6EEDD; --ink-soft: #B7ABC9;
+    --bg: #171126; --bg-deep: #0F0B1A; --card: #251C3B; --raised: #30264A; --seg-on: #4A3D70; --ink: #F6EEDD; --ink-soft: #B7ABC9;
     --line: #3A2F55; --moss: #8FCB6A; --seeds: #E9C27A; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #171126; --bg-deep: #0F0B1A; --card: #251C3B; --raised: #30264A; --ink: #F6EEDD; --ink-soft: #B7ABC9;
+  --bg: #171126; --bg-deep: #0F0B1A; --card: #251C3B; --raised: #30264A; --seg-on: #4A3D70; --ink: #F6EEDD; --ink-soft: #B7ABC9;
   --line: #3A2F55; --moss: #8FCB6A; --seeds: #E9C27A; color-scheme: dark;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -77,8 +77,8 @@ canvas { display: block; }
   box-shadow: 0 0 8px var(--c, var(--amber)); transition: width .8s ease-out; min-width: 12px; }
 .bar.thin { height: 7px; }
 .seg { display: flex; background: color-mix(in srgb, var(--line) 55%, transparent); border-radius: 10px; padding: 2px; }
-.seg button { flex: 1; padding: 7px 4px; border-radius: 8px; font-size: 13px; font-weight: 650; }
-.seg button.on { background: var(--raised); box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+.seg button { flex: 1; padding: 7px 4px; border-radius: 8px; font-size: 13px; font-weight: 650; color: var(--ink-soft); }
+.seg button.on { background: var(--seg-on); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,0.15), inset 0 0 0 1.5px color-mix(in srgb, var(--amber) 65%, transparent); }
 
 /* Tab bar */
 .tabbar { display: flex; justify-content: space-around; padding: 6px 4px calc(var(--safe-bottom) + 4px); background: color-mix(in srgb, var(--card) 88%, transparent);
