@@ -1316,7 +1316,7 @@ document.addEventListener('change', (e) => {
   if (!el) return;
   const key = el.dataset.set, val = el.type === 'range' ? +el.value : el.value;
   commit((s) => { s.settings[key] = val; });
-  if (key === 'ambientVolume' && S.activeSession) Sound.setAmbient(S.settings.ambient, val);
+  if (key === 'ambientVolume' && S.activeSession && !S.activeSession.pausedAt) Sound.setAmbient(S.settings.ambient, val);
 });
 
 document.addEventListener('keydown', (e) => {
