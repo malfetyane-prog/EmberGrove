@@ -12,7 +12,7 @@ export const POINTS_PER_HEART = 25;
 export function defaultSettings() {
   return {
     defaultMode: 'countdown', defaultMinutes: 25, defaultCategory: 'studying', dailyGoalMinutes: 60,
-    ambient: 'campfire', ambientVolume: 0.6, soundEffects: true, keepScreenAwake: true, showInCircle: true,
+    ambient: 'campfire', ambientVolume: 0.6, soundEffects: true, keepScreenAwake: true, focusStatus: 'time',
     reduceMotion: false, appearance: 'system', hasOnboarded: false,
     pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoEvery: 4, pomoAuto: false,
     deepFocus: true,

@@ -47,7 +47,7 @@ async function token(profile) {
   return profile.accessToken;
 }
 
-let circleReady = true; // false until the focus circle SQL has been run
+let circleReady = true, endsReady = true; // false until the focus circle / focus status SQL has been run
 
 /** Creates or updates this player's public row. */
 export async function publish(profile, row) {
@@ -56,13 +56,14 @@ export async function publish(profile, row) {
     method: 'POST', token: t, prefer: 'resolution=merge-duplicates,return=representation',
     body: { id: profile.userId, ...body, updated_at: new Date().toISOString() },
   });
-  const { focus_since, focus_until, ...stats } = row;
+  const { focus_since, focus_until, focus_ends_at, ...stats } = row;
+  const presence = { focus_since, focus_until, ...(endsReady ? { focus_ends_at } : {}) };
   let res;
-  try { res = await send(circleReady ? row : stats); }
+  try { res = await send(circleReady ? { ...stats, ...presence } : stats); }
   catch (e) {
     if (!/focus_/.test(e.message)) throw e;
-    circleReady = false;
-    res = await send(stats);
+    if (/focus_ends_at/.test(e.message)) endsReady = false; else circleReady = false;
+    res = await send(circleReady ? { ...stats, focus_since, focus_until } : stats);
   }
   if (res && res[0]) profile.tag = res[0].tag;
   return res && res[0];
@@ -84,11 +85,16 @@ export async function fetchBoard(profile, scope, weekKey) {
   }
 }
 
-/** Players focusing right now, longest-focusing first. */
+/** Players focusing right now, longest-focusing first. focus_ends_at is null when they keep their time private. */
 export async function fetchCircle(profile) {
   const t = profile.userId ? await token(profile) : null;
-  return call(`/rest/v1/players?select=id,name,appearance,focus_since&focus_until=gt.${encodeURIComponent(new Date().toISOString())}`
+  const q = (cols) => call(`/rest/v1/players?select=${cols}&focus_until=gt.${encodeURIComponent(new Date().toISOString())}`
     + '&hidden=is.false&banned=is.false&order=focus_since.asc&limit=30', { token: t });
+  try { return await q('id,name,appearance,focus_since,focus_ends_at'); }
+  catch (e) {
+    if (!/focus_ends_at/.test(e.message)) throw e;
+    return q('id,name,appearance,focus_since'); // before the focus status SQL is installed
+  }
 }
 
 /** Reports a player's name. Three reports from different players hide it automatically. */

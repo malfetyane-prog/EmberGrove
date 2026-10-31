@@ -84,12 +84,14 @@ create trigger reports_autohide after insert on public.reports
 -- Focus circle: who is focusing right now. focus_until expires on its own if the app closes mid-session.
 alter table public.players add column if not exists focus_since timestamptz;
 alter table public.players add column if not exists focus_until timestamptz;
+-- When the current focus session ends. Only sent by players who share their time left.
+alter table public.players add column if not exists focus_ends_at timestamptz;
 create index if not exists players_focus_until on public.players (focus_until);
 
 -- Players may only write their own stats, never `hidden`, `banned` or `tag`.
 revoke insert, update on public.players from anon, authenticated;
-grant insert (id, name, level, stage, appearance, week_key, week_minutes, total_minutes, focus_since, focus_until, updated_at) on public.players to authenticated;
-grant update (id, name, level, stage, appearance, week_key, week_minutes, total_minutes, focus_since, focus_until, updated_at) on public.players to authenticated;
+grant insert (id, name, level, stage, appearance, week_key, week_minutes, total_minutes, focus_since, focus_until, focus_ends_at, updated_at) on public.players to authenticated;
+grant update (id, name, level, stage, appearance, week_key, week_minutes, total_minutes, focus_since, focus_until, focus_ends_at, updated_at) on public.players to authenticated;
 grant insert (player) on public.reports to authenticated;
 
 -- Hide any names already on the board that break the rules.

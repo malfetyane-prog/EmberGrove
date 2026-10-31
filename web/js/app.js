@@ -12,6 +12,7 @@ import * as LB from './leaderboard.js';
 // ---------------------------------------------------------------- state
 let S = G.load();
 if (!S.settings.deepDefaultV2) { S.settings.deepFocus = true; S.settings.deepDefaultV2 = true; }
+if ('showInCircle' in S.settings) { if (!S.settings.showInCircle) S.settings.focusStatus = 'off'; delete S.settings.showInCircle; }
 G.refreshMilestones(S);
 G.save(S);
 
@@ -153,6 +154,7 @@ function renderHome() {
       <div class="spacer"><div class="label">Install the app</div><div class="small soft"><b>Share</b> → <b>Add to Home Screen</b>. Safari and the app keep separate progress.</div></div>
       <button data-act="hideInstallTip" aria-label="Dismiss" class="soft">${icon('close', 18)}</button></div>` : ''}
     ${choiceCards()}
+    ${nowCard()}
     ${rankCard()}
     <div class="card row" style="gap:18px">
       <div class="ring" role="img" aria-label="Focused ${today} of ${goal} minutes today">
@@ -389,8 +391,9 @@ function renderStats() {
   const best = Math.floor(Math.max(0, ...Object.values(byDay)));
   const tile = (title, value, ic) => `<div class="card" style="padding:14px"><span style="color:var(--amber)">${icon(ic, 18)}</span><div style="font-size:26px;font-weight:800">${value}</div><div class="small soft">${title}</div></div>`;
   const rec = (t, v, ic) => `<div class="row"><span style="color:var(--amber)">${icon(ic, 18)}</span><span class="spacer small">${t}</span><b class="small">${v}</b></div>`;
-  const seg = `<div class="title">Ranks</div><div class="seg"><button class="${ui.statsView === 'board' ? 'on' : ''}" data-act="statsView" data-arg="board">Leaderboard</button><button class="${ui.statsView === 'mine' ? 'on' : ''}" data-act="statsView" data-arg="mine">My stats</button></div>`;
+  const seg = `<div class="title">Ranks</div><div class="seg"><button class="${ui.statsView === 'board' ? 'on' : ''}" data-act="statsView" data-arg="board">Leaderboard</button><button class="${ui.statsView === 'mine' ? 'on' : ''}" data-act="statsView" data-arg="mine">My stats</button>${LB.enabled() ? `<button class="${ui.statsView === 'now' ? 'on' : ''}" data-act="statsView" data-arg="now">Now</button>` : ''}</div>`;
   if (ui.statsView === 'board') return `<div class="screen" data-tab="stats"><div class="stack">${seg}${renderBoard()}</div></div>`;
+  if (ui.statsView === 'now') return `<div class="screen" data-tab="stats"><div class="stack">${seg}${renderNow()}</div></div>`;
   return `<div class="screen" data-tab="stats"><div class="stack">
     ${seg}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${tile('Today', fmtMin(G.todayMinutes(S)), 'sun')}${tile('This week', fmtMin(week), 'calendar')}
@@ -437,21 +440,61 @@ function safeLook(a) {
 function boardRow() {
   const now = Date.now();
   const week = Math.floor(G.sessionsInWeek(S, now).reduce((a, r) => a + r.seconds, 0) / 60);
-  // Focus circle presence: expires on its own if the app is closed mid-session.
-  const a = S.activeSession, here = !!a && !a.pausedAt && S.settings.showInCircle;
-  const stay = a?.target ? G.remaining(a, now) + 120 : 20 * 60;
+  // Focus status: expires on its own if the app is closed mid-session. The end time is only shared
+  // with 'time' privacy; otherwise presence is refreshed in 20-minute steps so it doesn't reveal it.
+  const a = S.activeSession, status = S.settings.focusStatus, here = !!a && !a.pausedAt && status !== 'off';
+  const ends = here && status === 'time' && a.target ? G.endDate(a) : null;
+  const stay = ends ? (ends - now) / 1000 + 120 : 20 * 60;
   return { name: S.profile.name, level: G.level(S), stage: G.stage(S).name, appearance: G.appearance(S),
     week_key: G.weekKey(now), week_minutes: Math.min(6000, week), total_minutes: Math.min(1000000, G.totalMinutes(S)),
-    focus_since: here ? new Date(a.startDate).toISOString() : null, focus_until: here ? new Date(now + stay * 1000).toISOString() : null };
+    focus_since: here ? new Date(a.startDate).toISOString() : null, focus_until: here ? new Date(now + stay * 1000).toISOString() : null,
+    focus_ends_at: ends ? new Date(ends).toISOString() : null };
 }
 
-/** Other players focusing right now, shown sitting around the fire on the focus screen. */
+/** Other players focusing right now: around the fire on the focus screen, and in Ranks → Now with their time left. */
 async function loadCircle() {
-  if (!LB.enabled() || !S.activeSession || document.hidden) return;
-  const before = ui.circle?.length || 0;
-  try { ui.circle = (await LB.fetchCircle(S.profile || {})).filter((r) => r.id !== S.profile?.userId); }
-  catch (e) { ui.circle = null; }
-  if (S.activeSession && (ui.circle?.length || 0) !== before && !ui.reward) renderLayer();
+  const viewing = ui.tab === 'home' || (ui.tab === 'stats' && ui.statsView === 'now');
+  if (!LB.enabled() || document.hidden || (!S.activeSession && !viewing)) return;
+  const key = () => JSON.stringify((ui.nowRows || []).map((r) => [r.id, r.focus_ends_at]));
+  const before = key();
+  try { ui.nowRows = (await LB.fetchCircle(S.profile || {})).filter((r) => r.id !== S.profile?.userId); }
+  catch (e) { ui.nowRows = null; }
+  ui.circle = S.activeSession ? ui.nowRows : null;
+  if (key() === before || ui.reward || ui.sheet || ui.dialog) return;
+  if (S.activeSession) renderLayer(); else render();
+}
+
+const freeAt = (ms) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const timeLeft = (ms) => { const left = (ms - Date.now()) / 1000; return left > 0 ? fmtDur(Math.ceil(left)) : 'Wrapping up'; };
+const STATUS_OPTIONS = [['time', 'Time left'], ['busy', 'Busy only'], ['off', 'Hidden']];
+
+function renderNow() {
+  const st = S.settings.focusStatus, a = S.activeSession, rows = ui.nowRows;
+  const mine = a && !a.pausedAt && a.target && st !== 'off' ? G.endDate(a) : null;
+  const status = `<div class="card stack" style="gap:10px"><div class="row"><span class="spacer label">Your status</span>
+      ${mine ? `<span class="small soft">Free at ${freeAt(mine)}</span>` : ''}</div>
+    <div class="seg">${STATUS_OPTIONS.map(([k, l]) => `<button class="${st === k ? 'on' : ''}" data-act="focusStatus" data-arg="${k}">${l}</button>`).join('')}</div>
+    <div class="tiny soft">${st === 'time' ? 'Others see your countdown and when you\'ll be free.' : st === 'busy' ? 'Others see that you\'re focusing, not for how long.' : 'You won\'t appear to others.'}</div></div>`;
+  const row = (r) => {
+    const ends = r.focus_ends_at ? Date.parse(r.focus_ends_at) : null, since = r.focus_since ? Date.parse(r.focus_since) : null;
+    return `<div class="list-row">${emberCv(safeLook(r.appearance), 'focused', 44, false)}
+      <span class="spacer"><div class="label">${esc(r.name)}</div><div class="small soft">${ends ? `Free at ${freeAt(ends)}` : since ? `Focusing for ${fmtMin(Math.max(1, Math.round((Date.now() - since) / 60000)))}` : 'Focusing'}</div></span>
+      ${ends ? `<b class="countdown" data-ends="${ends}">${timeLeft(ends)}</b>` : `<span class="soft">${icon('flame', 18)}</span>`}</div>`;
+  };
+  const list = rows === undefined ? '<p class="small soft center">Loading…</p>'
+    : rows === null ? '<p class="small soft center">Couldn\'t load who\'s focusing.</p>'
+    : rows.length ? `<div class="stack" style="gap:10px">${rows.map(row).join('')}</div>`
+    : '<p class="small soft center">Nobody else is focusing right now.</p>';
+  return `${status}<div class="caps">Focusing now</div>${list}`;
+}
+
+function nowCard() {
+  const rows = ui.nowRows;
+  if (!LB.enabled() || !rows?.length) return '';
+  const first = rows.find((r) => r.focus_ends_at) || rows[0], ends = first.focus_ends_at ? Date.parse(first.focus_ends_at) : null;
+  return `<button class="choice" data-act="openNow"><span class="orb" style="background:var(--amber)">${icon('flame', 24)}</span>
+    <span class="spacer"><div class="label">${rows.length === 1 ? '1 person' : `${rows.length} people`} focusing now</div>
+    <div class="small soft">${esc(first.name)} ${ends ? `· free at ${freeAt(ends)}` : 'is focusing'}</div></span><span class="soft">${icon('chevron', 18)}</span></button>`;
 }
 
 let lastPublish = 0;
@@ -662,7 +705,7 @@ function sheetSettings() {
       ${tog('pomoAuto', 'Auto-start next round')}</div>
     <div class="caps">Focus helpers</div><div class="card" style="padding:0 16px">
       ${tog('deepFocus', 'Deep Focus by default')}
-      ${LB.enabled() ? tog('showInCircle', 'Show me in the focus circle') : ''}</div>
+      ${LB.enabled() ? sel('focusStatus', 'Share focus status', STATUS_OPTIONS) : ''}</div>
     <div class="caps">Sound</div><div class="card" style="padding:0 16px">
       ${sel('ambient', 'Ambience', Object.entries(AMBIENCE).map(([k, a]) => [k, a.title]))}
       <div class="form-row"><span>Volume</span><input type="range" min="0" max="1" step="0.05" value="${s.ambientVolume}" data-set="ambientVolume" aria-label="Ambience volume"></div>
@@ -1111,8 +1154,10 @@ function openSheet(type, arg) {
 
 let pokeTimer;
 const actions = {
-  tab: (id) => { ui.tab = id; ui.speech = null; render(); if (id === 'stats' && ui.statsView === 'board') loadBoard(); },
-  statsView: (v) => { ui.statsView = v; render(); if (v === 'board') loadBoard(); },
+  tab: (id) => { ui.tab = id; ui.speech = null; render(); if (id === 'stats' && ui.statsView === 'board') loadBoard(); loadCircle(); },
+  statsView: (v) => { ui.statsView = v; render(); if (v === 'board') loadBoard(); if (v === 'now') loadCircle(); },
+  openNow: () => { ui.tab = 'stats'; ui.statsView = 'now'; render(); loadCircle(); },
+  focusStatus: (v) => { commit((s) => { s.settings.focusStatus = v; }); publishNow(true); },
   lbScope: (v) => { ui.board.scope = v; ui.board.rows = null; loadBoard(); },
   lbRefresh: () => loadBoard(),
   lbJoin: async (inputId) => {
@@ -1301,7 +1346,7 @@ const actions = {
     if (ui.chapterPage < c.pages.length - 1) { ui.chapterPage++; renderLayer(); } else { ui.sheet = null; render(); }
   },
   curio: (id) => { const c = byId(CURIOS, id); ui.dialog = { title: c.name, body: c.blurb, buttons: [{ label: 'Lovely', act: 'closeDialog' }] }; renderLayer(); },
-  toggleSetting: (key) => { commit((s) => { s.settings[key] = !s.settings[key]; }); if (key === 'showInCircle') publishNow(true); },
+  toggleSetting: (key) => commit((s) => { s.settings[key] = !s.settings[key]; }),
   stepSetting: (arg) => {
     const [key, d] = arg.split(':'), lim = key === 'dailyGoalMinutes' ? [15, 480] : [5, 180];
     if (key.startsWith('pomo')) { commit((s) => { s.settings[key] = clampPomo(key, s.settings[key] + +d); }); return; }
@@ -1355,6 +1400,7 @@ document.addEventListener('change', (e) => {
   const key = el.dataset.set, val = el.type === 'range' ? +el.value : el.value;
   commit((s) => { s.settings[key] = val; });
   if (key === 'ambientVolume' && S.activeSession && !S.activeSession.pausedAt) Sound.setAmbient(S.settings.ambient, val);
+  if (key === 'focusStatus') publishNow(true);
 });
 
 document.addEventListener('keydown', (e) => {
@@ -1379,7 +1425,7 @@ setInterval(() => {
   heartbeat(); checkCompletion();
   if (S.activeSession && !S.activeSession.pausedAt && Date.now() - lastPublish > 5 * 60e3) publishNow(true); // keep stopwatch presence fresh
 }, 1000);
-setInterval(loadCircle, 45e3);
+setInterval(loadCircle, 30e3);
 window.addEventListener('pageshow', () => { heartbeat(); checkCompletion(); });
 window.addEventListener('pagehide', onAppHidden);
 
@@ -1472,6 +1518,7 @@ function frame() {
   else if (ui.worldMood === 'curious' && !ui.sheet) ui.worldMood = 'idle';
   for (const c of document.querySelectorAll('canvas[data-kind]')) drawCanvas(c, t, still);
   updateFocusText();
+  for (const el of document.querySelectorAll('[data-ends]')) { const txt = timeLeft(+el.dataset.ends); if (el.textContent !== txt) el.textContent = txt; }
   if (ui.reward && ui.glowStart) {
     const el = document.getElementById('glowCount');
     if (el) el.textContent = `+${Math.round(ui.reward.glowTotal * Math.min(1, (performance.now() - ui.glowStart) / 700))} Glow`;
@@ -1487,6 +1534,7 @@ if (S.activeSession && !S.activeSession.pausedAt) keepAwake(true);
 requestAnimationFrame(frame);
 publishNow();
 loadBoard();
+loadCircle();
 setTimeout(() => maybeAskJoin(), 1200);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 window.__ember = { get state() { return S; }, actions, G, ui, render, loadBoard };
