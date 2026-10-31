@@ -47,13 +47,23 @@ async function token(profile) {
   return profile.accessToken;
 }
 
+let circleReady = true; // false until the focus circle SQL has been run
+
 /** Creates or updates this player's public row. */
 export async function publish(profile, row) {
   const t = await token(profile);
-  const res = await call('/rest/v1/players?on_conflict=id', {
+  const send = (body) => call('/rest/v1/players?on_conflict=id', {
     method: 'POST', token: t, prefer: 'resolution=merge-duplicates,return=representation',
-    body: { id: profile.userId, ...row, updated_at: new Date().toISOString() },
+    body: { id: profile.userId, ...body, updated_at: new Date().toISOString() },
   });
+  const { focus_since, focus_until, ...stats } = row;
+  let res;
+  try { res = await send(circleReady ? row : stats); }
+  catch (e) {
+    if (!/focus_/.test(e.message)) throw e;
+    circleReady = false;
+    res = await send(stats);
+  }
   if (res && res[0]) profile.tag = res[0].tag;
   return res && res[0];
 }
@@ -72,6 +82,13 @@ export async function fetchBoard(profile, scope, weekKey) {
     if (/hidden|banned/.test(e.message)) return call(`/rest/v1/players?select=${cols}&${q}&limit=50`, { token: t });
     throw e;
   }
+}
+
+/** Players focusing right now, longest-focusing first. */
+export async function fetchCircle(profile) {
+  const t = profile.userId ? await token(profile) : null;
+  return call(`/rest/v1/players?select=id,name,appearance,focus_since&focus_until=gt.${encodeURIComponent(new Date().toISOString())}`
+    + '&hidden=is.false&banned=is.false&order=focus_since.asc&limit=30', { token: t });
 }
 
 /** Reports a player's name. Three reports from different players hide it automatically. */

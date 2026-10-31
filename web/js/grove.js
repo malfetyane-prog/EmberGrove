@@ -550,3 +550,84 @@ export function drawCompanion(ctx, id, t = 2, still = true, dark = false) {
     }
   }
 }
+
+/** Shop illustration of a decoration, drawn in a 100×100 box. */
+export function drawDecorThumb(ctx, id, t = 2, still = true) {
+  const el = (x, y, rx, ry, c) => ellipse(ctx, x, y, rx, ry, c);
+  const rect = (x, y, w, h, r, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); };
+  const sway = (k, amt) => (still ? 0 : S(t * 1.6 + k) * amt);
+  el(50, 86, 46, 11, '#86B56A'); el(50, 84, 42, 8, '#A8D07F');
+  for (const [gx, gy] of [[14, 84], [86, 85], [30, 90], [72, 90]]) {
+    ctx.beginPath(); ctx.moveTo(gx - 2, gy); ctx.lineTo(gx, gy - 5); ctx.lineTo(gx + 2, gy); ctx.fillStyle = '#6E9E52'; ctx.fill();
+  }
+  switch (id) {
+    case 'steppingStones':
+      [[22, 88, 10], [40, 80, 9], [58, 86, 10], [75, 78, 8]].forEach(([x, y, r]) => {
+        el(x, y + 1.6, r, r * 0.46, '#8F8899'); el(x, y, r, r * 0.46, '#D6D0DC'); el(x - r * 0.3, y - 1, r * 0.35, r * 0.14, '#F1EDF4');
+      });
+      break;
+    case 'toadstoolStools':
+      for (const [x, s] of [[34, 1], [68, 0.78]]) {
+        const top = 85 - 24 * s;
+        rect(x - 7 * s, top, 14 * s, 24 * s, 5 * s, '#FFF1DC'); rect(x - 7 * s, top + 16 * s, 14 * s, 8 * s, 5 * s, '#EADBC4');
+        el(x, top + 2, 19 * s, 8 * s, '#B8403C'); el(x, top, 19 * s, 8 * s, '#D9534F');
+        for (const [dx, dy, r] of [[-9, -1, 2.6], [3, -3, 2.2], [11, 1, 1.8], [-2, 3, 1.6]]) el(x + dx * s, top + dy * s, r * s, r * 0.7 * s, '#FFF4E0');
+      }
+      break;
+    case 'windChimes': {
+      ctx.strokeStyle = '#7A5236'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(8, 14); ctx.quadraticCurveTo(50, 6, 94, 16); ctx.stroke();
+      ellipse(ctx, 80, 12, 6, 3, '#8DBF5A'); ellipse(ctx, 22, 11, 5, 2.5, '#8DBF5A');
+      ctx.lineWidth = 1; ctx.strokeStyle = '#B8A88A';
+      ctx.beginPath(); ctx.moveTo(50, 10); ctx.lineTo(50, 22); ctx.stroke();
+      el(50, 24, 16, 3, '#9A6A44');
+      for (let k = 0; k < 5; k++) {
+        const cx = 38 + k * 6, sw = sway(k, 2), len = 22 + [0, 8, 14, 8, 0][k];
+        ctx.beginPath(); ctx.moveTo(cx, 25); ctx.lineTo(cx + sw, 30); ctx.stroke();
+        rect(cx + sw - 2, 30, 4, len, 2, '#D8C188'); rect(cx + sw - 2, 30, 1.4, len, 1, '#F4E4B4');
+      }
+      ctx.beginPath(); ctx.moveTo(50, 25); ctx.lineTo(50 + sway(9, 3), 62); ctx.stroke();
+      el(50 + sway(9, 3), 66, 3.5, 4.5, '#E8674A');
+      break;
+    }
+    case 'birdhouse': {
+      rect(47, 46, 6, 40, 1, '#7A5236');
+      rect(32, 30, 36, 28, 3, '#E3A962'); rect(32, 52, 36, 6, 2, '#C98D4A');
+      ctx.beginPath(); ctx.moveTo(26, 33); ctx.lineTo(50, 12); ctx.lineTo(74, 33); ctx.closePath(); ctx.fillStyle = '#C94A47'; ctx.fill();
+      ctx.beginPath(); ctx.moveTo(26, 33); ctx.lineTo(50, 12); ctx.lineTo(50, 17); ctx.lineTo(31, 34); ctx.closePath(); ctx.fillStyle = '#E06560'; ctx.fill();
+      el(50, 40, 6, 6, '#3A2A3E'); rect(48, 49, 4, 7, 1, '#7A5236');
+      const hop = still ? 0 : Math.max(0, S(t * 2)) * 2;
+      el(66, 26 - hop, 6, 4.5, '#9A6A44'); el(70, 22 - hop, 3.6, 3.6, '#9A6A44'); el(71, 21.5 - hop, 0.9, 0.9, '#2E2238');
+      ctx.beginPath(); ctx.moveTo(73, 22 - hop); ctx.lineTo(76.5, 22.6 - hop); ctx.lineTo(73, 23.6 - hop); ctx.fillStyle = '#F2C14E'; ctx.fill();
+      break;
+    }
+    case 'paperLanterns': {
+      ctx.beginPath(); ctx.moveTo(4, 18); ctx.quadraticCurveTo(50, 44, 96, 18); ctx.strokeStyle = '#5A4A52'; ctx.lineWidth = 1.2; ctx.stroke();
+      [['#FFB347', 0.2], ['#E8674A', 0.5], ['#B79CFF', 0.8]].forEach(([col, f], k) => {
+        const x = 4 + f * 92, y = (1 - f) ** 2 * 18 + 2 * (1 - f) * f * 44 + f * f * 18, sw = sway(k, 1.5);
+        radialGlow(ctx, x + sw, y + 18, 26, col, 0.35);
+        rect(x - 5 + sw, y, 10, 3, 1, '#5A4A52');
+        rect(x - 10 + sw, y + 3, 20, 26, 9, col);
+        ctx.strokeStyle = 'rgba(90,58,40,0.25)'; ctx.lineWidth = 0.8;
+        for (const dx of [-4, 0, 4]) { ctx.beginPath(); ctx.moveTo(x + sw + dx, y + 4); ctx.lineTo(x + sw + dx, y + 28); ctx.stroke(); }
+        el(x - 4 + sw, y + 11, 2.5, 5, 'rgba(255,255,255,0.35)');
+        rect(x - 4 + sw, y + 29, 8, 3, 1, '#5A4A52');
+      });
+      break;
+    }
+    case 'fairyLights':
+      [[28, 78, 1], [54, 82, 1.15], [77, 76, 0.9]].forEach(([x, y, s], k) => {
+        const pulse = still ? 0.8 : 0.6 + 0.4 * S(t * 2 + k * 1.3);
+        radialGlow(ctx, x, y - 12 * s, 24 * s, '#FFE07A', 0.55 * pulse);
+        rect(x - 9 * s, y - 24 * s, 18 * s, 24 * s, 5 * s, 'rgba(220,239,245,0.75)');
+        rect(x - 7 * s, y - 28 * s, 14 * s, 5 * s, 1.5 * s, '#9A6A44');
+        el(x, y - 11 * s, 3 * s, 3 * s, '#FFF4C0'); el(x - 4 * s, y - 16 * s, 1.6 * s, 1.6 * s, '#FFF4C0');
+        el(x - 5 * s, y - 18 * s, 1.5 * s, 4 * s, 'rgba(255,255,255,0.5)');
+      });
+      for (let k = 0; k < 4; k++) {
+        const a = still ? k : t * 0.7 + k * 1.6;
+        sparkle(ctx, 50 + S(a) * 34, 34 + C(a * 1.3) * 14, 2.2, '#FFE07A');
+      }
+      break;
+  }
+}

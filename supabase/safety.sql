@@ -2,6 +2,7 @@
 -- Layer 2: the database rejects blocked names, even from a modified app.
 -- Layer 3: players can report names; 3 reports hide a name automatically.
 -- Layer 4: you can set `banned = true` on any player in Table Editor; players can't undo it.
+-- Also adds the focus circle columns (who is focusing right now).
 
 -- Same rules as web/js/namefilter.js
 create or replace function public.name_is_clean(raw text) returns boolean
@@ -80,10 +81,15 @@ drop trigger if exists reports_autohide on public.reports;
 create trigger reports_autohide after insert on public.reports
   for each row execute function public.reports_autohide();
 
+-- Focus circle: who is focusing right now. focus_until expires on its own if the app closes mid-session.
+alter table public.players add column if not exists focus_since timestamptz;
+alter table public.players add column if not exists focus_until timestamptz;
+create index if not exists players_focus_until on public.players (focus_until);
+
 -- Players may only write their own stats, never `hidden`, `banned` or `tag`.
 revoke insert, update on public.players from anon, authenticated;
-grant insert (id, name, level, stage, appearance, week_key, week_minutes, total_minutes, updated_at) on public.players to authenticated;
-grant update (id, name, level, stage, appearance, week_key, week_minutes, total_minutes, updated_at) on public.players to authenticated;
+grant insert (id, name, level, stage, appearance, week_key, week_minutes, total_minutes, focus_since, focus_until, updated_at) on public.players to authenticated;
+grant update (id, name, level, stage, appearance, week_key, week_minutes, total_minutes, focus_since, focus_until, updated_at) on public.players to authenticated;
 grant insert (player) on public.reports to authenticated;
 
 -- Hide any names already on the board that break the rules.

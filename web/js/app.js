@@ -4,7 +4,7 @@ import {
   ABILITIES, ACHIEVEMENTS, RENEWAL_MILESTONES, byId, stageFor,
 } from './content.js';
 import { drawEmber } from './ember.js';
-import { drawGrove, drawCompanion, skyPhase, groundY, WORLD_W, WORLD_H, COMPANION_FRAMES } from './grove.js';
+import { drawGrove, drawCompanion, drawDecorThumb, skyPhase, groundY, WORLD_W, WORLD_H, COMPANION_FRAMES } from './grove.js';
 import * as Sound from './audio.js';
 import { icon } from './icons.js';
 import * as LB from './leaderboard.js';
@@ -63,6 +63,7 @@ function emberCv(a, mood, size, anim = true, extra = '') {
   return `<canvas data-kind="ember" data-a="${json(a)}" data-mood="${mood}" data-anim="${anim ? 1 : 0}" style="width:${size}px;height:${size}px;${extra}"></canvas>`;
 }
 const companionCv = (id, size) => `<canvas data-kind="companion" data-id="${id}" style="width:${size}px;height:${size}px"></canvas>`;
+const decorCv = (id, size) => `<canvas data-kind="decor" data-id="${id}" style="width:${size}px;height:${size}px;flex:none"></canvas>`;
 
 // ---------------------------------------------------------------- render
 function render() {
@@ -438,8 +439,21 @@ function safeLook(a) {
 function boardRow() {
   const now = Date.now();
   const week = Math.floor(G.sessionsInWeek(S, now).reduce((a, r) => a + r.seconds, 0) / 60);
+  // Focus circle presence: expires on its own if the app is closed mid-session.
+  const a = S.activeSession, here = !!a && !a.pausedAt && S.settings.showInCircle;
+  const stay = a?.target ? G.remaining(a, now) + 120 : 20 * 60;
   return { name: S.profile.name, level: G.level(S), stage: G.stage(S).name, appearance: G.appearance(S),
-    week_key: G.weekKey(now), week_minutes: Math.min(6000, week), total_minutes: Math.min(1000000, G.totalMinutes(S)) };
+    week_key: G.weekKey(now), week_minutes: Math.min(6000, week), total_minutes: Math.min(1000000, G.totalMinutes(S)),
+    focus_since: here ? new Date(a.startDate).toISOString() : null, focus_until: here ? new Date(now + stay * 1000).toISOString() : null };
+}
+
+/** Other players focusing right now, shown sitting around the fire on the focus screen. */
+async function loadCircle() {
+  if (!LB.enabled() || !S.activeSession || document.hidden) return;
+  const before = ui.circle?.length || 0;
+  try { ui.circle = (await LB.fetchCircle(S.profile || {})).filter((r) => r.id !== S.profile?.userId); }
+  catch (e) { ui.circle = null; }
+  if (S.activeSession && (ui.circle?.length || 0) !== before && !ui.reward) renderLayer();
 }
 
 let lastPublish = 0;
@@ -533,9 +547,9 @@ function sheetSetup() {
       : '<p class="small soft">The stopwatch counts up until you finish. Every minute counts.</p>'}
     <div class="stack" style="gap:10px"><div class="caps">Category</div><div class="chips">${Object.entries(CATEGORIES).map(([k, c]) => `<button class="chip ${u.category === k ? 'on' : ''}" style="--chip:${c.color}" data-act="setup" data-arg="cat:${k}">${icon(c.icon, 16)}${c.title}</button>`).join('')}</div></div>
     <div class="card stack" style="gap:8px">
-      <div class="row"><span style="color:var(--amber)">${icon('moon', 20)}</span><span class="spacer label">Deep Focus<div class="tiny soft" style="font-weight:500">Timer pauses if you leave the app</div></span>
+      <div class="row"><span style="color:var(--amber)">${icon('moon', 20)}</span><span class="spacer label">Deep Focus<div class="tiny soft" style="font-weight:500">Time in other apps doesn't count</div></span>
         <button class="toggle ${u.deep ? 'on' : ''}" data-act="setup" data-arg="deep" aria-pressed="${!!u.deep}" aria-label="Deep Focus"></button></div>
-      <p class="small soft">Put your phone face down. If you leave the app, the timer waits for you, and staying the whole time earns bonus Glow.</p>
+      <p class="small soft">Lock your phone or put it face down. If you open another app, the timer waits for you. Staying focused the whole time earns bonus Glow.</p>
     </div>
     <div class="stack" style="gap:10px"><div class="caps">Ambience</div><div class="chips">${Object.entries(AMBIENCE).map(([k, a]) => `<button class="chip ${u.ambient === k ? 'on' : ''}" data-act="setup" data-arg="amb:${k}">${icon(a.icon, 16)}${a.title}</button>`).join('')}</div>
       ${AMBIENCE[u.ambient]?.hint ? `<p class="small soft">${AMBIENCE[u.ambient].hint}</p>` : ''}</div>
@@ -626,7 +640,7 @@ function sheetLandmark(l) {
 function sheetDecor() {
   const body = `<div class="stack" style="gap:10px">${DECORATIONS.map((d) => {
     const own = S.ownedDecorations.includes(d.id), shown = !S.hiddenDecorations.includes(d.id);
-    return `<div class="list-row"><span class="spacer"><div class="label">${esc(d.name)}</div><div class="small soft">${esc(d.blurb)}</div></span>
+    return `<div class="list-row">${decorCv(d.id, 64)}<span class="spacer"><div class="label">${esc(d.name)}</div><div class="small soft">${esc(d.blurb)}</div></span>
       ${own ? `<button class="toggle ${shown ? 'on' : ''}" data-act="toggleDecor" data-arg="${d.id}" aria-label="Show ${esc(d.name)}" aria-pressed="${shown}"></button>`
         : `<button class="btn small-btn ${S.seeds >= d.cost ? '' : 'secondary'}" data-act="buyDecor" data-arg="${d.id}"><span class="seed"></span>${d.cost}</button>`}</div>`;
   }).join('')}<p class="small soft">Decorations appear around the hearth. Earn Seeds by focusing and finishing quests.</p></div>`;
@@ -650,7 +664,8 @@ function sheetSettings() {
       ${step('pomoLong', 'Long break', `${s.pomoLong} min`, 5)}${step('pomoEvery', 'Rounds per cycle', s.pomoEvery, 1)}
       ${tog('pomoAuto', 'Start next round or break automatically')}</div>
     <div class="caps">Focus helpers</div><div class="card" style="padding:0 16px">
-      ${tog('deepFocus', 'Deep Focus by default')}</div>
+      ${tog('deepFocus', 'Deep Focus by default')}
+      ${LB.enabled() ? tog('showInCircle', 'Show me in the focus circle') : ''}</div>
     <div class="caps">Sound</div><div class="card" style="padding:0 16px">
       ${sel('ambient', 'Ambience', Object.entries(AMBIENCE).map(([k, a]) => [k, a.title]))}
       <div class="form-row"><span>Volume</span><input type="range" min="0" max="1" step="0.05" value="${s.ambientVolume}" data-set="ambientVolume" aria-label="Ambience volume"></div>
@@ -680,7 +695,7 @@ function sheetChapter(c) {
 function renderDialog() {
   const d = ui.dialog;
   return `<div class="dialog-bd" data-act="${d.cancel || 'closeDialog'}"></div><div class="dialog" role="alertdialog"><div class="stack" style="gap:10px">
-    <div class="h2">${esc(d.title)}</div>${d.body ? `<p class="small soft">${esc(d.body)}</p>` : ''}${d.input ? `<input type="text" id="dlgInput" value="${esc(d.input)}" maxlength="${d.inputMax || 16}" autocomplete="off">` : ''}
+    ${d.art ? `<div style="display:grid;place-items:center;margin:-8px 0 -12px">${d.art}</div>` : ''}<div class="h2">${esc(d.title)}</div>${d.body ? `<p class="small soft">${esc(d.body)}</p>` : ''}${d.input ? `<input type="text" id="dlgInput" value="${esc(d.input)}" maxlength="${d.inputMax || 16}" autocomplete="off">` : ''}
     <div class="stack" style="gap:8px;margin-top:6px">${d.buttons.map((b) => `<button class="btn ${b.secondary ? 'secondary' : ''}" style="${b.danger ? 'color:var(--coral)' : ''}" data-act="${b.act}" data-arg="${b.arg || ''}">${esc(b.label)}</button>`).join('')}</div></div></div>`;
 }
 
@@ -701,14 +716,19 @@ function renderFocus() {
       ${a.target ? `<div style="width:220px;margin:12px auto 0"><div class="bar thin"><i id="fbar" style="width:0%;transition:none"></i></div></div>` : ''}
       <p id="fline" class="center" style="color:var(--lavender);margin-top:12px;font-size:16px"></p>
       ${a.deep ? `<div class="center" style="margin-top:12px"><span class="ghost-pill" style="font-size:13px">${icon('moon', 14)} ${ui.awayNotice
-        ? `You were away ${fmtMin(Math.max(1, Math.round(ui.awayNotice / 60)))}. The timer waited for you.`
-        : a.interruptions ? `Deep Focus · ${plural(a.interruptions, 'pause')} so far` : 'Deep Focus · phone face down'}</span></div>` : ''}
+        ? `${fmtMin(Math.max(1, Math.round(ui.awayNotice / 60)))} in another app. The timer waited for you.`
+        : a.interruptions ? `Deep Focus · ${plural(a.interruptions, 'pause')} so far` : 'Deep Focus · locking your phone is fine'}</span></div>` : ''}
       ${a.pomo && S.pomo ? roundDots(S.pomo.cycle, S.settings.pomoEvery, true) : ''}
+      ${ui.circle?.length ? `<div class="center" style="margin-top:10px"><span class="ghost-pill" style="font-size:13px">${icon('flame', 14)} ${ui.circle.length === 1 ? '1 other is' : `${ui.circle.length} others are`} focusing with you</span></div>` : ''}
       <div class="spacer"></div>
-      <div class="row" style="justify-content:center;gap:28px">
+      ${a.awayCheck ? `<div class="away-card stack" role="alertdialog" style="gap:10px">
+        <div class="label">Welcome back! You were away ${fmtMin(Math.max(1, Math.round(a.awayCheck / 60)))}.</div>
+        <div class="small" style="color:var(--lavender)">Was your screen locked, or were you using another app?</div>
+        <button class="btn" data-act="awayLocked">${icon('lock', 18)} My screen was locked</button>
+        <button class="btn secondary" data-act="awayApp">I used another app</button></div>` : `<div class="row" style="justify-content:center;gap:28px">
         <button class="round-btn" data-act="${a.pausedAt ? 'resume' : 'pause'}" aria-label="${a.pausedAt ? 'Resume' : 'Pause'}">${icon(a.pausedAt ? 'play' : 'pause', 30)}</button>
         <button class="round-btn ghost" data-act="finish" aria-label="Finish session">${icon('check', 26)}</button>
-      </div>
+      </div>`}
     </div></div>`;
 }
 
@@ -890,6 +910,7 @@ function startSession() {
   Sound.setAmbient(S.settings.ambient, S.settings.ambientVolume);
   sfx('start');
   keepAwake(true);
+  publishNow(true); loadCircle();
 }
 
 // ---------------------------------------------------------------- Deep Focus
@@ -899,6 +920,7 @@ const GRACE_SECONDS = 10;
  * Deep Focus away detection. iPhone stops running a web app as soon as it leaves the screen
  * (switching apps, locking, or iOS closing it), so a gap in this once-a-second heartbeat means the
  * player was away. This works even when iOS doesn't deliver the "page hidden" event.
+ * A web app can't tell locking from switching apps, so the player is asked on return (awayCheck).
  */
 function heartbeat() {
   const a = S.activeSession, now = Date.now();
@@ -909,15 +931,33 @@ function heartbeat() {
     if (!heartbeat.saved || now - heartbeat.saved > 5000) { heartbeat.saved = now; G.save(S); }
     return;
   }
-  a.pausedTotal += gap;
-  a.awaySeconds = (a.awaySeconds || 0) + gap;
-  a.interruptions = (a.interruptions || 0) + 1;
-  ui.awayNotice = gap;
-  clearTimeout(heartbeat.t);
-  heartbeat.t = setTimeout(() => { ui.awayNotice = null; if (S.activeSession) renderLayer(); }, 9000);
-  lastTimerText = '';
+  a.awayCheck = (a.awayCheck || 0) + gap;
   G.save(S);
   if (ui.reward === null && !ui.sheet) renderLayer();
+}
+
+/** The player's answer to "was your screen locked?". Time in another app doesn't count. */
+function answerAway(locked) {
+  const a = S.activeSession, gap = a?.awayCheck;
+  if (!gap) return;
+  commit((s) => {
+    const x = s.activeSession;
+    x.awayCheck = null;
+    if (!locked) {
+      x.pausedTotal += gap;
+      x.awaySeconds = (x.awaySeconds || 0) + gap;
+      x.interruptions = (x.interruptions || 0) + 1;
+    }
+  });
+  if (!locked) {
+    ui.awayNotice = gap;
+    clearTimeout(heartbeat.t);
+    heartbeat.t = setTimeout(() => { ui.awayNotice = null; if (S.activeSession) renderLayer(); }, 9000);
+  }
+  lastTimerText = '';
+  sfx('tap');
+  checkCompletion();
+  publishNow(true);
 }
 
 function onAppHidden() {
@@ -963,7 +1003,7 @@ function checkCompletion() {
     if (S.settings.pomoAuto) startNextRound();
   }
   const a = S.activeSession;
-  if (!a || a.mode !== 'countdown' || a.pausedAt) return;
+  if (!a || a.mode !== 'countdown' || a.pausedAt || a.awayCheck) return;
   const end = G.endDate(a);
   if (end && Date.now() >= end) finishSession(end);
 }
@@ -1016,6 +1056,7 @@ function startNextRound() {
   Sound.setAmbient(S.settings.ambient, S.settings.ambientVolume);
   sfx('start');
   keepAwake(true);
+  publishNow(true); loadCircle();
 }
 
 function renderBreak() {
@@ -1179,11 +1220,12 @@ const actions = {
   skipBreak: () => startNextRound(),
   nextRound: () => startNextRound(),
   endPomo: () => { clearTimeout(ui.revealTimer); ui.reward = null; keepAwake(false); document.title = 'Ember Grove'; commit((s) => { s.pomo = null; s.activeBreak = null; }); },
-  pause: () => { commit((s) => { s.activeSession.pausedAt = Date.now(); }); Sound.stopAmbient(); lastTimerText = ''; },
+  pause: () => { commit((s) => { s.activeSession.pausedAt = Date.now(); }); Sound.stopAmbient(); lastTimerText = ''; publishNow(true); },
   resume: () => {
     Sound.unlock();
     commit((s) => { const a = s.activeSession; a.pausedTotal += (Date.now() - a.pausedAt) / 1000; a.pausedAt = null; a.lastSeen = Date.now(); });
     Sound.setAmbient(S.settings.ambient, S.settings.ambientVolume); lastTimerText = '';
+    publishNow(true);
   },
   cycleAmbient: () => {
     Sound.unlock();
@@ -1200,7 +1242,9 @@ const actions = {
     renderLayer();
   },
   finishNow: () => finishSession(),
-  discard: () => { ui.dialog = null; Sound.stopAmbient(); keepAwake(false); document.title = 'Ember Grove'; commit((s) => { s.activeSession = null; }); },
+  awayLocked: () => answerAway(true),
+  awayApp: () => answerAway(false),
+  discard: () => { ui.dialog = null; Sound.stopAmbient(); keepAwake(false); document.title = 'Ember Grove'; commit((s) => { s.activeSession = null; }); publishNow(true); },
   rewardTap: () => { revealNext(); scheduleReveal(); },
   rewardWear: (id) => { const c = byId(COSMETICS, id); commit((s) => G.equip(s, c, c.slot)); sfx('tap'); },
   rewardGo: (arg) => {
@@ -1238,7 +1282,7 @@ const actions = {
     const c = id ? byId(COSMETICS, id) : null;
     if (c && !G.isCosmeticUnlocked(S, c)) {
       if (c.unlock.seeds) {
-        ui.dialog = { title: `Get the ${c.name}?`, body: c.blurb, buttons: [
+        ui.dialog = { art: emberCv({ ...G.appearance(S), [c.slot]: c.id }, 'happy', 120), title: `Get the ${c.name}?`, body: c.blurb, buttons: [
           { label: S.seeds >= c.unlock.seeds ? `Buy for ${c.unlock.seeds} Seeds` : `Needs ${c.unlock.seeds} Seeds (you have ${S.seeds})`, act: S.seeds >= c.unlock.seeds ? 'buyCosmetic' : 'closeDialog', arg: c.id },
           { label: 'Not now', act: 'closeDialog', secondary: true }] };
         renderLayer();
@@ -1263,7 +1307,7 @@ const actions = {
     if (ui.chapterPage < c.pages.length - 1) { ui.chapterPage++; renderLayer(); } else { ui.sheet = null; render(); }
   },
   curio: (id) => { const c = byId(CURIOS, id); ui.dialog = { title: c.name, body: c.blurb, buttons: [{ label: 'Lovely', act: 'closeDialog' }] }; renderLayer(); },
-  toggleSetting: (key) => commit((s) => { s.settings[key] = !s.settings[key]; }),
+  toggleSetting: (key) => { commit((s) => { s.settings[key] = !s.settings[key]; }); if (key === 'showInCircle') publishNow(true); },
   stepSetting: (arg) => {
     const [key, d] = arg.split(':'), lim = key === 'dailyGoalMinutes' ? [15, 480] : [5, 180];
     if (key.startsWith('pomo')) { commit((s) => { s.settings[key] = clampPomo(key, s.settings[key] + +d); }); return; }
@@ -1331,12 +1375,17 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     onAppVisible();
     checkCompletion();
+    loadCircle();
     if (S.activeSession && !S.activeSession.pausedAt) keepAwake(true);
     render();
     publishNow();
   }
 });
-setInterval(() => { heartbeat(); checkCompletion(); }, 1000);
+setInterval(() => {
+  heartbeat(); checkCompletion();
+  if (S.activeSession && !S.activeSession.pausedAt && Date.now() - lastPublish > 5 * 60e3) publishNow(true); // keep stopwatch presence fresh
+}, 1000);
+setInterval(loadCircle, 45e3);
 window.addEventListener('pageshow', () => { heartbeat(); checkCompletion(); });
 window.addEventListener('pagehide', onAppHidden);
 
@@ -1367,6 +1416,10 @@ function drawCanvas(c, t, still) {
     const [cx, cy, span] = COMPANION_FRAMES[c.dataset.id], s = Math.min(w, h) / span;
     ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * (w / 2 - cx * s), dpr * (h / 2 - cy * s));
     drawCompanion(ctx, c.dataset.id, 2, true, false);
+  } else if (kind === 'decor') {
+    const s = Math.min(w, h) / 100;
+    ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * (w - 100 * s) / 2, dpr * (h - 100 * s) / 2);
+    drawDecorThumb(ctx, c.dataset.id, t, still || !anim);
   } else if (kind === 'grove') {
     const live = c.dataset.live, yTop = +(c.dataset.ytop || 0), s = h / (WORLD_H - yTop);
     let vp = c.dataset.vp === 'auto' ? null : c.dataset.vp.split(',').map(Number);
@@ -1383,12 +1436,39 @@ function drawCanvas(c, t, still) {
     }
     ctx.setTransform(dpr * s, 0, 0, dpr * s, -vp[0] * dpr * s, -yTop * dpr * s);
     drawGrove(ctx, scene, { phase, viewport: vp, t, still, hearthBoost: boost });
+    const spots = CIRCLE_SPOTS.filter(([x, , size]) => x - size / 2 >= vp[0] && x + size / 2 <= vp[1]);
+    const others = live === 'focus' && ui.circle ? ui.circle.slice(0, spots.length) : [], tags = [];
+    others.map((p, i) => [p, spots[i]]).sort((x, y) => x[1][1] - y[1][1]).forEach(([p, [x, dy, size]], i) => {
+      const top = groundY(x) + dy - size * 0.91;
+      ctx.save(); ctx.translate(x - size / 2, top); ctx.scale(size / 200, size / 200);
+      drawEmber(ctx, safeLook(p.appearance), 'focused', t + i * 1.7, still);
+      ctx.restore();
+      tags.push([x, top + size * 0.36, String(p.name || '')]);
+    });
     const es = +(c.dataset.es || 96), top = groundY(ex) + 52 - es * 0.91;
     ctx.save(); ctx.translate(ex - es / 2, top); ctx.scale(es / 200, es / 200);
     drawEmber(ctx, G.appearance(S), mood, t, still);
     ctx.restore();
+    if (tags.length) {
+      tags.push([ex, top + es * 0.36, 'You', true]);
+      for (const tag of tags) nameTag(ctx, ...tag);
+    }
   }
   c.dataset.drawn = '1';
+}
+
+// Where other players sit around the fire on the focus screen: [x, depth below ground, size].
+// Front seats first; spots that don't fit the screen's width are skipped.
+const CIRCLE_SPOTS = [[201, 50, 70], [406, 48, 62], [228, 18, 54], [370, 8, 52], [150, 30, 60], [452, 30, 60]];
+
+function nameTag(ctx, x, y, text, me = false) {
+  const label = [...text].length > 10 ? `${[...text].slice(0, 9).join('')}…` : text;
+  ctx.font = '700 9px ui-rounded, system-ui, -apple-system, sans-serif';
+  const w = ctx.measureText(label).width + 12;
+  ctx.fillStyle = me ? 'rgba(242,166,59,0.92)' : 'rgba(30,22,48,0.7)';
+  ctx.beginPath(); ctx.roundRect(x - w / 2, y - 14, w, 13, 6.5); ctx.fill();
+  ctx.fillStyle = me ? '#2E2238' : '#FFF4E0'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y - 7.3);
 }
 
 function frame() {
