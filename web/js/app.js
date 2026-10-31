@@ -150,7 +150,7 @@ function renderHome() {
     </div>
     ${!isStandalone() && !set.hideInstallTip ? `<div class="card row" style="gap:12px;align-items:flex-start">
       <span style="color:var(--amber)">${icon('share', 26)}</span>
-      <div class="spacer"><div class="label">Add Ember Grove to your Home Screen</div><div class="small soft">In Safari, tap <b>Share</b>, then <b>Add to Home Screen</b>. It then opens full-screen like an app. Your progress is saved separately in Safari and in the Home Screen app, so pick one and stick with it.</div></div>
+      <div class="spacer"><div class="label">Install the app</div><div class="small soft"><b>Share</b> → <b>Add to Home Screen</b>. Safari and the app keep separate progress.</div></div>
       <button data-act="hideInstallTip" aria-label="Dismiss" class="soft">${icon('close', 18)}</button></div>` : ''}
     ${choiceCards()}
     ${rankCard()}
@@ -180,7 +180,7 @@ function renderHome() {
 function rankCard() {
   if (!LB.enabled()) return '';
   if (!S.profile) return `<button class="choice" data-act="openJoin" style="border-color:color-mix(in srgb,var(--lavender) 70%,transparent)"><span class="orb" style="background:var(--lavender)">${icon('star', 24)}</span>
-    <span class="spacer"><div class="label">Join the leaderboard</div><div class="small soft">Pick a name and see how your focus compares with friends</div></span><span class="soft">${icon('chevron', 18)}</span></button>`;
+    <span class="spacer label">Join the leaderboard</span><span class="soft">${icon('chevron', 18)}</span></button>`;
   const rows = ui.weekRows || [], i = rows.findIndex((r) => r.id === S.profile.userId);
   const sub = i >= 0 ? `You're <b>#${i + 1}</b> of ${rows.length} this week` : 'Finish a session this week to get on the board';
   return `<button class="choice" data-act="tab" data-arg="stats" style="border-color:color-mix(in srgb,var(--lavender) 70%,transparent)"><span class="orb" style="background:var(--lavender)">${icon('chart', 24)}</span>
@@ -254,7 +254,7 @@ function renderEmber() {
       <div style="width:100%;margin-top:8px">${bar(G.levelProgress(S.xp))}<div class="row small soft" style="margin-top:4px"><b>Level ${lvl}</b><span class="spacer"></span>${S.xp} Glow</div></div>
     </div>
     ${G.canChoosePath(S) ? `<button class="btn" data-act="openSheet" data-arg="path">${icon('sparkles', 20)} ${nm()} is ready to evolve</button>` : ''}
-    <div class="card stack" style="gap:12px"><div><div class="h2">Evolution</div>${S.path ? '' : '<div class="small soft">At level 8, choose one of three paths.</div>'}</div>
+    <div class="card stack" style="gap:12px"><div class="h2">Evolution</div>
       <div class="row" style="overflow-x:auto;gap:12px;align-items:flex-start;padding-bottom:4px">${[0, 1, 2, 3, 4].map(stageCell).join('')}</div></div>
     <div class="card stack" style="gap:10px"><div class="h2">Abilities</div>
       ${ABILITIES.filter((ab) => !ab.path || ab.path === S.path).map((ab) => {
@@ -265,7 +265,7 @@ function renderEmber() {
     <div class="card stack" style="gap:12px"><div class="h2">Wardrobe</div>
       <div class="seg">${['head', 'neck', 'face', 'flame'].map((s) => `<button class="${ui.slot === s ? 'on' : ''}" data-act="slot" data-arg="${s}">${s[0].toUpperCase() + s.slice(1)}</button>`).join('')}</div>
       <div class="grid3">${ui.slot !== 'flame' ? wardrobeTile(null) : ''}${COSMETICS.filter((c) => c.slot === ui.slot).map(wardrobeTile).join('')}</div></div>
-    <div class="card stack" style="gap:12px"><div><div class="h2">Memories</div><div class="small soft">${nm()}'s story so far</div></div>
+    <div class="card stack" style="gap:12px"><div class="h2">Memories</div>
       ${S.journal.length ? S.journal.slice(-25).reverse().map((j) => `<div class="row" style="align-items:flex-start"><span class="orb-sm" style="background:color-mix(in srgb,var(--amber-glow) 25%,transparent);color:var(--amber)">${icon(j.icon, 14)}</span>
         <div><div class="small">${esc(j.text)}</div><div class="tiny soft">${new Date(j.date).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div></div></div>`).join('')
         : '<div class="small soft">Nothing yet. The first memory begins with your first focus session.</div>'}</div>
@@ -312,8 +312,8 @@ function renderJourney() {
     ${body}</div></div>`;
 }
 
-function questGroup(title, sub, list) {
-  return `<div class="card stack" style="gap:14px"><div><div class="h2">${title}</div><div class="small soft">${sub}</div></div>
+function questGroup(title, list) {
+  return `<div class="card stack" style="gap:14px"><div class="h2">${title}</div>
     ${list.map((q) => `<div><div class="row"><div class="spacer"><div class="label">${esc(q.template.title)}</div>
       <div class="small soft row" style="gap:8px"><span class="row" style="gap:3px"><span class="seed"></span>${q.template.seeds}</span><span>${icon('flame', 13)} ${q.template.glow} Glow</span></div></div>
       ${q.claimed ? `<span class="small" style="color:var(--moss);font-weight:700">${icon('check', 16)} Claimed</span>`
@@ -321,9 +321,8 @@ function questGroup(title, sub, list) {
         : `<span class="small soft">${q.progress}/${q.template.target}</span>`}</div>
       <div style="margin-top:8px">${bar(q.progress / q.template.target, q.complete ? 'var(--moss)' : 'var(--amber)', true)}</div></div>`).join('')}</div>`;
 }
-const journeyQuests = () => `${questGroup('Today', 'New quests every morning', G.quests(S, 'daily'))}
-  ${questGroup('This week', 'Bigger goals, bigger rewards', G.quests(S, 'weekly'))}
-  <p class="small soft center">Quests are always optional. Nothing is lost if you skip a day: the grove just waits for you.</p>`;
+const journeyQuests = () => `${questGroup('Today', G.quests(S, 'daily'))}
+  ${questGroup('This week', G.quests(S, 'weekly'))}`;
 
 function chapterHint(t) {
   if (t.firstSession) return 'Complete your first session';
@@ -339,8 +338,8 @@ const journeyStory = () => CHAPTERS.map((c) => {
   const open = !!S.chapters[c.id], read = S.chaptersRead.includes(c.id);
   return `<button class="list-row" ${open ? `data-act="readChapter" data-arg="${c.id}"` : 'disabled'} style="width:100%;text-align:left;border:1px solid var(--line)">
     <span style="width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:19px;flex:none;background:${open ? 'var(--amber-glow)' : 'color-mix(in srgb,var(--line) 50%,transparent)'};color:${open ? 'var(--ink-fixed)' : 'var(--ink-soft)'}">${c.number}</span>
-    <span class="spacer"><div class="label">${open ? esc(c.title) : 'A chapter yet to come'}</div>
-    <div class="small" style="color:${open && !read ? 'var(--amber)' : 'var(--ink-soft)'}">${open ? (read ? 'Read' : 'New') : esc(chapterHint(c.trigger))}</div></span>
+    <span class="spacer">${open ? `<div class="label">${esc(c.title)}</div>
+    <div class="small" style="color:${read ? 'var(--ink-soft)' : 'var(--amber)'}">${read ? 'Read' : 'New'}</div>` : `<div class="small soft">${esc(chapterHint(c.trigger))}</div>`}</span>
     ${open ? `<span class="soft">${icon('chevron', 18)}</span>` : ''}</button>`;
 }).join('');
 
@@ -356,7 +355,7 @@ const journeyFriends = () => COMPANIONS.map((c) => {
 
 const journeyCurios = () => `<div class="card stack" style="gap:14px"><div><div class="h2">Curio cabinet</div><div class="small soft">${Object.keys(S.curios).length} of ${CURIOS.length} found. Longer sessions find more.</div></div>
   <div class="grid3">${CURIOS.map((c) => { const f = !!S.curios[c.id]; return `<button class="stack center" style="gap:6px;align-items:center" ${f ? `data-act="curio" data-arg="${c.id}"` : ''}>
-    <span class="curio ${f ? '' : 'off'}">${icon(f ? c.icon : 'question', 24)}</span><span class="small" style="font-weight:650;color:${f ? 'var(--ink)' : 'var(--ink-soft)'}">${f ? esc(c.name) : '???'}</span></button>`; }).join('')}</div></div>`;
+    <span class="curio ${f ? '' : 'off'}">${icon(f ? c.icon : 'question', 24)}</span>${f ? `<span class="small" style="font-weight:650">${esc(c.name)}</span>` : ''}</button>`; }).join('')}</div></div>`;
 
 const journeyFeats = () => ACHIEVEMENTS.map((a) => {
   const d = S.achievements[a.id];
@@ -398,8 +397,7 @@ function renderStats() {
       ${tile('Lifetime', `${(G.totalMinutes(S) / 60).toFixed(1)}h`, 'flame')}${tile('Sessions', c.length, 'check')}</div>
     <div class="card stack" style="gap:8px"><div class="h2">Last 7 days</div>
       <svg viewBox="0 0 320 178" width="100%" role="img" aria-label="Minutes focused over the last seven days">${bars}</svg>
-      <div class="chips small">${Object.entries(CATEGORIES).map(([, v]) => `<span class="row" style="gap:5px"><i style="width:9px;height:9px;border-radius:50%;background:${v.color}"></i>${v.title}</span>`).join('')}</div>
-      <div class="small soft">Your daily goal is ${fmtMin(S.settings.dailyGoalMinutes)}. Any amount is progress.</div></div>
+      <div class="chips small">${Object.entries(CATEGORIES).map(([, v]) => `<span class="row" style="gap:5px"><i style="width:9px;height:9px;border-radius:50%;background:${v.color}"></i>${v.title}</span>`).join('')}</div></div>
     ${totals.length ? `<div class="card stack" style="gap:10px"><div class="h2">Where your focus goes</div><div class="row" style="gap:18px">
       <svg width="120" height="120" style="transform:rotate(-90deg);flex:none">${donut}</svg>
       <div class="spacer stack" style="gap:8px">${totals.map(([k, m]) => `<div class="row small"><i style="width:10px;height:10px;border-radius:50%;background:${CATEGORIES[k].color}"></i><span class="spacer">${CATEGORIES[k].title}</span><span class="soft">${fmtMin(m)}</span></div>`).join('')}</div></div></div>` : ''}
@@ -486,7 +484,7 @@ function renderBoard() {
   const join = me ? `<div class="card row" style="gap:12px">${emberCv(G.appearance(S), 'happy', 48)}<div class="spacer"><div class="small soft">You're on the board as</div>
       <div class="label">${esc(me.name)}${me.tag ? ` <span class="soft">#${me.tag}</span>` : ''}</div></div><button class="small" style="color:var(--amber);font-weight:700" data-act="lbRename">Change</button></div>`
     : `<div class="card stack" style="gap:10px"><div class="h2">Join the leaderboard</div>
-      <p class="small soft">Pick the name your friends will see. No email or password needed.</p>
+      <p class="small soft">No email or password needed.</p>
       <input type="text" id="lbName" maxlength="20" placeholder="Your name" autocomplete="nickname" aria-label="Your leaderboard name">
       ${b.joinError ? `<div class="small" style="color:var(--coral)">${esc(b.joinError)}</div>` : ''}
       <button class="btn" data-act="lbJoin" data-arg="lbName" ${b.joining ? 'disabled' : ''}>${b.joining ? 'Joining…' : `${icon('star', 20)} Join`}</button></div>`;
@@ -510,7 +508,7 @@ function renderBoard() {
     <div class="row"><div class="seg spacer"><button class="${b.scope === 'week' ? 'on' : ''}" data-act="lbScope" data-arg="week">This week</button><button class="${b.scope === 'all' ? 'on' : ''}" data-act="lbScope" data-arg="all">All time</button></div>
       <button data-act="lbRefresh" aria-label="Refresh" style="width:40px;height:36px;display:grid;place-items:center;color:var(--ink-soft)">${icon('clock', 20)}</button></div>
     <div class="stack" style="gap:8px">${list}</div>
-    <p class="tiny soft center">See a name that isn't okay? Tap ${icon('flag', 12)} to report it.<br>Ranked by focus minutes. The weekly board starts fresh every Monday.<br>Only your name, ${nm()}'s look and level, and your focus minutes are shared.</p>
+    <p class="tiny soft center">Resets every Monday · Tap ${icon('flag', 12)} to report a name</p>
     ${me ? '<button class="small soft center" data-act="lbLeave" style="padding:8px">Leave the leaderboard</button>' : ''}`;
 }
 
@@ -537,7 +535,7 @@ function renderSheet() {
 function sheetSetup() {
   const u = ui.setup, presets = [15, 25, 45, 60];
   const body = `<div class="stack" style="gap:22px">
-    <div class="row" style="gap:12px">${emberCv(G.appearance(S), 'curious', 84)}<div><div class="h2">What are we focusing on?</div><div class="small soft">${nm()} will keep the fire going.</div></div></div>
+    <div class="row" style="gap:12px">${emberCv(G.appearance(S), 'curious', 84)}<div class="h2">What are we focusing on?</div></div>
     <div class="stack" style="gap:10px"><div class="caps">Mode</div><div class="seg">
       <button class="${u.mode === 'countdown' ? 'on' : ''}" data-act="setup" data-arg="mode:countdown">Timer</button><button class="${u.mode === 'pomodoro' ? 'on' : ''}" data-act="setup" data-arg="mode:pomodoro">Pomodoro</button><button class="${u.mode === 'stopwatch' ? 'on' : ''}" data-act="setup" data-arg="mode:stopwatch">Stopwatch</button></div></div>
     ${u.mode === 'pomodoro' ? pomoSetup(u) : u.mode === 'countdown' ? `<div class="stack" style="gap:10px"><div class="caps">Length</div><div class="chips">
@@ -549,7 +547,6 @@ function sheetSetup() {
     <div class="card stack" style="gap:8px">
       <div class="row"><span style="color:var(--amber)">${icon('moon', 20)}</span><span class="spacer label">Deep Focus<div class="tiny soft" style="font-weight:500">Time in other apps doesn't count</div></span>
         <button class="toggle ${u.deep ? 'on' : ''}" data-act="setup" data-arg="deep" aria-pressed="${!!u.deep}" aria-label="Deep Focus"></button></div>
-      <p class="small soft">Lock your phone or put it face down. If you open another app, the timer waits for you. Staying focused the whole time earns bonus Glow.</p>
     </div>
     <div class="stack" style="gap:10px"><div class="caps">Ambience</div><div class="chips">${Object.entries(AMBIENCE).map(([k, a]) => `<button class="chip ${u.ambient === k ? 'on' : ''}" data-act="setup" data-arg="amb:${k}">${icon(a.icon, 16)}${a.title}</button>`).join('')}</div>
       ${AMBIENCE[u.ambient]?.hint ? `<p class="small soft">${AMBIENCE[u.ambient].hint}</p>` : ''}</div>
@@ -578,13 +575,13 @@ function sheetJoin() {
   const body = `<div class="stack center" style="gap:14px;align-items:center">
     ${emberCv(G.appearance(S), 'happy', 120)}
     <div class="h2" style="font-size:24px">Join the leaderboard</div>
-    <p class="small soft" style="max-width:320px">Focus alongside friends and see who kept their fire burning longest this week. Just pick a name: no email or password.</p>
+    <p class="small soft" style="max-width:320px">See who kept their fire burning longest this week. No email needed.</p>
     ${top.length ? `<div class="stack" style="gap:6px;width:100%">${top.map((r, i) => `<div class="list-row" style="padding:8px 12px;gap:10px">
       <span style="width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:none;font-weight:800;font-size:13px;background:${medal[i]};color:var(--ink-fixed)">${i + 1}</span>
       ${emberCv(safeLook(r.appearance), 'idle', 34, false)}<span class="spacer label" style="text-align:left">${esc(r.name)}</span><b class="small">${fmtMin(r.week_minutes | 0)}</b></div>`).join('')}</div>` : ''}
     <input type="text" id="joinName" maxlength="20" placeholder="Your name" autocomplete="nickname" aria-label="Your leaderboard name" style="text-align:center">
     ${b.joinError ? `<div class="small" style="color:var(--coral)">${esc(b.joinError)}</div>` : ''}
-    <p class="tiny soft">Only your name, ${nm()}'s look and level, and your focus minutes are shared.</p></div>`;
+    <p class="tiny soft">Only your name, ${nm()}'s look, level and focus minutes are shared.</p></div>`;
   return sheetFrame('', body, `<div class="stack" style="gap:8px"><button class="btn" data-act="lbJoin" data-arg="joinName" ${b.joining ? 'disabled' : ''}>${b.joining ? 'Joining…' : `${icon('star', 20)} Join`}</button>
     <button class="btn secondary" data-act="joinLater">Not now</button></div>`);
 }
@@ -643,7 +640,7 @@ function sheetDecor() {
     return `<div class="list-row">${decorCv(d.id, 64)}<span class="spacer"><div class="label">${esc(d.name)}</div><div class="small soft">${esc(d.blurb)}</div></span>
       ${own ? `<button class="toggle ${shown ? 'on' : ''}" data-act="toggleDecor" data-arg="${d.id}" aria-label="Show ${esc(d.name)}" aria-pressed="${shown}"></button>`
         : `<button class="btn small-btn ${S.seeds >= d.cost ? '' : 'secondary'}" data-act="buyDecor" data-arg="${d.id}"><span class="seed"></span>${d.cost}</button>`}</div>`;
-  }).join('')}<p class="small soft">Decorations appear around the hearth. Earn Seeds by focusing and finishing quests.</p></div>`;
+  }).join('')}</div>`;
   return sheetFrame(`Decorate <span class="pill" style="margin-left:8px;color:var(--seeds)"><span class="seed"></span>${S.seeds}</span>`, body);
 }
 
@@ -658,11 +655,11 @@ function sheetSettings() {
       ${step('defaultMinutes', 'Default length', `${s.defaultMinutes} min`, 5)}
       ${sel('defaultCategory', 'Default category', Object.entries(CATEGORIES).map(([k, c]) => [k, c.title]))}
       ${step('dailyGoalMinutes', 'Daily goal', fmtMin(s.dailyGoalMinutes), 15)}
-      ${tog('keepScreenAwake', 'Keep screen awake while focusing')}</div>
+      ${tog('keepScreenAwake', 'Keep screen awake')}</div>
     <div class="caps">Pomodoro</div><div class="card" style="padding:0 16px">
       ${step('pomoFocus', 'Focus round', `${s.pomoFocus} min`, 5)}${step('pomoShort', 'Short break', `${s.pomoShort} min`, 1)}
       ${step('pomoLong', 'Long break', `${s.pomoLong} min`, 5)}${step('pomoEvery', 'Rounds per cycle', s.pomoEvery, 1)}
-      ${tog('pomoAuto', 'Start next round or break automatically')}</div>
+      ${tog('pomoAuto', 'Auto-start next round')}</div>
     <div class="caps">Focus helpers</div><div class="card" style="padding:0 16px">
       ${tog('deepFocus', 'Deep Focus by default')}
       ${LB.enabled() ? tog('showInCircle', 'Show me in the focus circle') : ''}</div>
@@ -670,14 +667,13 @@ function sheetSettings() {
       ${sel('ambient', 'Ambience', Object.entries(AMBIENCE).map(([k, a]) => [k, a.title]))}
       <div class="form-row"><span>Volume</span><input type="range" min="0" max="1" step="0.05" value="${s.ambientVolume}" data-set="ambientVolume" aria-label="Ambience volume"></div>
       ${tog('soundEffects', 'Sound effects')}</div>
-    <div class="caps">Accessibility & display</div><div class="card" style="padding:0 16px">
+    <div class="caps">Display</div><div class="card" style="padding:0 16px">
       ${tog('reduceMotion', 'Reduce motion')}
       ${sel('appearance', 'Appearance', [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']])}</div>
     <div class="caps">Your progress</div><div class="card" style="padding:0 16px">
-      <div class="form-row"><span class="spacer small soft">Progress is saved on this device. Make a backup now and then, and before clearing Safari's data.</span></div>
+      <div class="form-row"><span class="spacer small soft">Saved on this device only. Back up now and then.</span></div>
       <div class="form-row"><button class="label" style="color:var(--amber)" data-act="exportData">Copy a backup</button><span class="spacer"></span><button class="label" style="color:var(--amber)" data-act="importData">Restore a backup</button></div>
-      <div class="form-row"><button class="label" style="color:var(--coral)" data-act="reset">Start a new grove</button></div></div>
-    <p class="tiny soft center">Ember Grove · original art drawn in code, sound synthesized live.</p></div>`;
+      <div class="form-row"><button class="label" style="color:var(--coral)" data-act="reset">Start a new grove</button></div></div></div>`;
   return sheetFrame('Settings', body);
 }
 
@@ -715,11 +711,9 @@ function renderFocus() {
       <div id="timer" class="timer" role="timer">--:--</div>
       ${a.target ? `<div style="width:220px;margin:12px auto 0"><div class="bar thin"><i id="fbar" style="width:0%;transition:none"></i></div></div>` : ''}
       <p id="fline" class="center" style="color:var(--lavender);margin-top:12px;font-size:16px"></p>
-      ${a.deep ? `<div class="center" style="margin-top:12px"><span class="ghost-pill" style="font-size:13px">${icon('moon', 14)} ${ui.awayNotice
-        ? `${fmtMin(Math.max(1, Math.round(ui.awayNotice / 60)))} in another app. The timer waited for you.`
-        : a.interruptions ? `Deep Focus · ${plural(a.interruptions, 'pause')} so far` : 'Deep Focus · locking your phone is fine'}</span></div>` : ''}
+      ${a.deep && ui.awayNotice ? `<div class="center" style="margin-top:12px"><span class="ghost-pill" style="font-size:13px">${icon('moon', 14)} ${fmtMin(Math.max(1, Math.round(ui.awayNotice / 60)))} away. The timer waited.</span></div>` : ''}
       ${a.pomo && S.pomo ? roundDots(S.pomo.cycle, S.settings.pomoEvery, true) : ''}
-      ${ui.circle?.length ? `<div class="center" style="margin-top:10px"><span class="ghost-pill" style="font-size:13px">${icon('flame', 14)} ${ui.circle.length === 1 ? '1 other is' : `${ui.circle.length} others are`} focusing with you</span></div>` : ''}
+      ${ui.circle?.length ? `<div class="center" style="margin-top:10px"><span class="ghost-pill" style="font-size:13px">${icon('flame', 14)} ${ui.circle.length} focusing with you</span></div>` : ''}
       <div class="spacer"></div>
       ${a.awayCheck ? `<div class="away-card stack" role="alertdialog" style="gap:10px">
         <div class="label">Welcome back! You were away ${fmtMin(Math.max(1, Math.round(a.awayCheck / 60)))}.</div>

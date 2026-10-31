@@ -14,7 +14,7 @@ export const AMBIENCE = {
   rain: { title: 'Soft Rain', icon: 'rain' },
   breeze: { title: 'Forest Breeze', icon: 'wind' },
   lofi: { title: 'Lo-fi Beats', icon: 'note' },
-  binaural: { title: 'Focus Waves', icon: 'headphones', hint: 'Binaural 14 Hz beta waves. Use headphones: each ear hears a slightly different tone.' },
+  binaural: { title: 'Focus Waves', icon: 'headphones', hint: 'Binaural beta waves. Best with headphones.' },
 };
 
 export const PATHS = {
