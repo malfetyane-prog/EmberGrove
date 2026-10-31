@@ -26,6 +26,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Version the offline cache so phones pick up each update
         run: sed -i "s/ember-grove-v1/ember-grove-${GITHUB_SHA::8}/" web/sw.js
+      - name: Stamp the version the app checks for when it's reopened
+        run: echo "${GITHUB_SHA::8}" > web/version.txt
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

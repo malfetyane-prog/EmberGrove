@@ -1537,4 +1537,20 @@ loadBoard();
 loadCircle();
 setTimeout(() => maybeAskJoin(), 1200);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// A Home Screen app usually resumes instead of relaunching, so check for a new version on the way back in
+// and reload when nothing is in progress (progress lives in localStorage, so a reload loses nothing).
+let appVersion = null, versionCheckedAt = 0;
+async function checkForUpdate() {
+  if (!location.protocol.startsWith('http') || Date.now() - versionCheckedAt < 60e3) return;
+  versionCheckedAt = Date.now();
+  try {
+    const v = (await (await fetch(`version.txt?${Date.now()}`, { cache: 'no-store' })).text()).trim();
+    if (!/^[0-9a-f]{8}$/.test(v)) return;
+    if (appVersion && v !== appVersion && !S.activeSession && !S.activeBreak && !ui.sheet && !ui.dialog && !ui.reward) location.reload();
+    else appVersion ||= v;
+  } catch (e) { /* offline */ }
+}
+checkForUpdate();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
 window.__ember = { get state() { return S; }, actions, G, ui, render, loadBoard };
